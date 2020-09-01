@@ -13,6 +13,25 @@ import (
 	"github.com/jkvatne/go-measure/instr"
 )
 
+// WaveForm is the analog output function generator waveforms
+type WaveForm int
+
+// WaveForm constants
+const (
+	WfDc WaveForm = iota
+	WfSine
+	WfSquare
+	WfTriangle
+	WfRampUp
+	WfRampDown
+	WfNoise
+	WfPulse
+	WfTapeze
+	WfSinPower
+	WfCustom
+	WfPlay
+)
+
 // Ad2 is the state data for the unit
 type Ad2 struct {
 	hdwf    C.HDWF
@@ -101,7 +120,7 @@ func (a *Ad2) SetOutput(ch instr.Chan, voltage float64, current float64) error {
 	e &= C.FDwfAnalogIOChannelNodeSet(a.hdwf, C.int(ch), 1, C.double(voltage))
 	// Set current limit
 	e &= C.FDwfAnalogIOChannelNodeSet(a.hdwf, C.int(ch), 2, C.double(current))
-	if e != 0 {
+	if e == 0 {
 		return fmt.Errorf("error setting supply output")
 	}
 	return nil
@@ -109,9 +128,9 @@ func (a *Ad2) SetOutput(ch instr.Chan, voltage float64, current float64) error {
 
 // SetupChannel will configure one channels range and offset and coupling
 func (a *Ad2) SetupChannel(ch instr.Chan, rng float64, offs float64, coupling string) error {
-	C.FDwfAnalogInChannelRangeSet(a.hdwf, C.int(ch), C.double(rng))
-	C.FDwfAnalogInChannelOffsetSet(a.hdwf, C.int(ch), C.double(offs))
-	C.FDwfAnalogInChannelEnableSet(a.hdwf, C.int(ch), C.int(1))
+	e := C.FDwfAnalogInChannelRangeSet(a.hdwf, C.int(ch), C.double(rng))
+	e &= C.FDwfAnalogInChannelOffsetSet(a.hdwf, C.int(ch), C.double(offs))
+	e &= C.FDwfAnalogInChannelEnableSet(a.hdwf, C.int(ch), C.int(1))
 	if coupling != "DC" {
 		return fmt.Errorf("only DC coupling allowed")
 	}
@@ -124,11 +143,11 @@ func (a *Ad2) Measure(ch instr.Chan, typ string) (result float64, err error) {
 	if typ != "VOLT" {
 		return 0.0, fmt.Errorf("only voltage measurements possible")
 	}
-	C.FDwfAnalogInFrequencySet(a.hdwf, C.double(20000000.0))
-	C.FDwfAnalogInBufferSizeSet(a.hdwf, C.int(avgCnt))
-	C.FDwfAnalogInChannelEnableSet(a.hdwf, C.int(ch), C.int(1))
-	C.FDwfAnalogInChannelRangeSet(a.hdwf, C.int(ch), C.double(5.0))
-	C.FDwfAnalogInConfigure(a.hdwf, C.int(0), C.int(1))
+	e := C.FDwfAnalogInFrequencySet(a.hdwf, C.double(20000000.0))
+	e &= C.FDwfAnalogInBufferSizeSet(a.hdwf, C.int(avgCnt))
+	e &= C.FDwfAnalogInChannelEnableSet(a.hdwf, C.int(ch), C.int(1))
+	e &= C.FDwfAnalogInChannelRangeSet(a.hdwf, C.int(ch), C.double(5.0))
+	e &= C.FDwfAnalogInConfigure(a.hdwf, C.int(0), C.int(1))
 	for {
 		var sts C.uchar
 		C.FDwfAnalogInStatus(a.hdwf, C.int(1), &sts)
@@ -138,52 +157,52 @@ func (a *Ad2) Measure(ch instr.Chan, typ string) (result float64, err error) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	var rgdAnalog [avgCnt]C.double
-	C.FDwfAnalogInStatusData(a.hdwf, C.int(0), &rgdAnalog[0], C.int(avgCnt)) // get channel 1 data
+	e &= C.FDwfAnalogInStatusData(a.hdwf, C.int(0), &rgdAnalog[0], C.int(avgCnt)) // get channel 1 data
+	if e == 0 {
+		return 0.0, fmt.Errorf("error in Measure()")
+	}
 	result = float64(rgdAnalog[0]+rgdAnalog[1]+rgdAnalog[2]+rgdAnalog[3]+rgdAnalog[4]) / float64(avgCnt)
 	return result, nil
 }
 
-/*
-// SetQuadrature will set analog output to simulate quadrature encoder
-func (a *Ad2) SetQuadrature(freq float64, volt float64, offset float64) {
-	// enable both channels
-	C.FDwfAnalogOutNodeEnableSet(a.hdwf, 0, C.AnalogOutNodeCarrier, 1)
-	C.FDwfAnalogOutNodeEnableSet(a.hdwf, 1, C.AnalogOutNodeCarrier, 1)
+// SetAnalogOut will set analog output. PhaseDelay for channel is 0-360.0 degrees.
+func (a *Ad2) SetAnalogOut(ch instr.Chan, freq float64, phaseDelay float64, waveform WaveForm, volt float64, offset float64) error {
+	channel := C.int(ch - instr.Ch1)
+	if ch < instr.Ch1 || ch > instr.Ch2 {
+		return fmt.Errorf("only channels 1 and 2 allowed")
+	}
+	if phaseDelay < 0.0 || phaseDelay > 360.0 {
+		return fmt.Errorf("phase must be 0-360.0 degrees")
+	}
+	// enable channel
+	e := C.FDwfAnalogOutNodeEnableSet(a.hdwf, channel, C.AnalogOutNodeCarrier, 1)
 	// set sine function
-	C.FDwfAnalogOutNodeFunctionSet(a.hdwf, -1, C.AnalogOutNodeCarrier, C.funcSine)
+	e &= C.FDwfAnalogOutNodeFunctionSet(a.hdwf, channel, C.AnalogOutNodeCarrier, C.uchar(waveform))
 	// set frequency
 	if freq >= 0 {
-		C.FDwfAnalogOutNodeFrequencySet(a.hdwf, -1, C.AnalogOutNodeCarrier, C.double(freq))
+		e &= C.FDwfAnalogOutNodeFrequencySet(a.hdwf, channel, C.AnalogOutNodeCarrier, C.double(freq))
 	} else {
-		C.FDwfAnalogOutNodeFrequencySet(a.hdwf, -1, C.AnalogOutNodeCarrier, C.double(-freq))
+		e &= C.FDwfAnalogOutNodeFrequencySet(a.hdwf, channel, C.AnalogOutNodeCarrier, C.double(-freq))
 	}
-	// 0.5V amplitude (1Vpp)
-	C.FDwfAnalogOutNodeAmplitudeSet(a.hdwf, 0, C.AnalogOutNodeCarrier, C.double(volt))
-	C.FDwfAnalogOutNodeAmplitudeSet(a.hdwf, 1, C.AnalogOutNodeCarrier, C.double(volt))
-	// 2.5V offset
-	C.FDwfAnalogOutNodeOffsetSet(a.hdwf, 0, C.AnalogOutNodeCarrier, C.double(offset))
-	C.FDwfAnalogOutNodeOffsetSet(a.hdwf, 1, C.AnalogOutNodeCarrier, C.double(offset))
-	// Set quadrature phase
-	if freq > 0 {
-		C.FDwfAnalogOutNodePhaseSet(a.hdwf, 0, C.AnalogOutNodeCarrier, 0)
-		C.FDwfAnalogOutNodePhaseSet(a.hdwf, 1, C.AnalogOutNodeCarrier, 90)
-	} else {
-		C.FDwfAnalogOutNodePhaseSet(a.hdwf, 0, C.AnalogOutNodeCarrier, 90)
-		C.FDwfAnalogOutNodePhaseSet(a.hdwf, 1, C.AnalogOutNodeCarrier, 0)
+	// set amplitude (Vpp)
+	e &= C.FDwfAnalogOutNodeAmplitudeSet(a.hdwf, channel, C.AnalogOutNodeCarrier, C.double(volt))
+	// set offset in volts
+	e &= C.FDwfAnalogOutNodeOffsetSet(a.hdwf, channel, C.AnalogOutNodeCarrier, C.double(offset))
+	// Set phase in degrees
+	e &= C.FDwfAnalogOutNodePhaseSet(a.hdwf, channel, C.AnalogOutNodeCarrier, C.double(phaseDelay))
+	if e == 0 {
+		return fmt.Errorf("error in Measure()")
 	}
-	// start signal generation
-	C.FDwfAnalogOutConfigure(a.hdwf, -1, 1)
+	return nil
 }
 
-// SetupScope is temporary
-func (a *Ad2) SetupScope() {
-	C.FDwfAnalogInFrequencySet(a.hdwf, C.double(20000000.0))
-	C.FDwfAnalogInBufferSizeSet(a.hdwf, C.int(100))
-	C.FDwfAnalogInChannelEnableSet(a.hdwf, C.int(0), C.int(1))
-	C.FDwfAnalogInChannelRangeSet(a.hdwf, C.int(0), C.double(5.0))
+// StartAnalogOut will start the function generator. Must be preceeded by SetAnalogOut.
+// Use ch=-1 to start both channels
+func (a *Ad2) StartAnalogOut(ch instr.Chan) {
+	// start signal generation. Use ch=-1 (TRIG) to start both at the same time
+	channel := C.int(ch - instr.Ch1)
+	C.FDwfAnalogOutConfigure(a.hdwf, channel, 1)
 }
-
-*/
 
 // SetupTime will configure the sample interval and mode
 func (a *Ad2) SetupTime(sampleInterval float64, offs float64, mode instr.SampleMode) error {
