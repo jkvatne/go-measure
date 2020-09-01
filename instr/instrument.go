@@ -1,7 +1,8 @@
-// Copyright 2020 Jan Kåre Vatne. All rights reserved.
-
 // Package instrument contains the basic communication routines
 // used by all instruments. USB, go-measure/serialSerial and TCP/IP is supported
+
+// Copyright 2020 Jan Kåre Vatne. All rights reserved.
+
 package instr
 
 import (
@@ -85,11 +86,13 @@ func (i *Connection) Close() {
 
 // Write will send a commend to the instrument, adding end of line characters
 func (i *Connection) Write(s string, args ...interface{}) error {
-	req := fmt.Sprintf(s, args)
+	if args != nil {
+		s = fmt.Sprintf(s, args)
+	}
 	if i.conn == nil {
 		return fmt.Errorf("writing to invalic port")
 	}
-	b := []byte(i.addEol(req))
+	b := []byte(i.addEol(s))
 	if conn, ok := i.conn.(net.Conn); ok {
 		_ = conn.SetWriteDeadline(time.Now().Add(i.Timeout))
 	}

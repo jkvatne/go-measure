@@ -19,17 +19,34 @@ type Fluke struct {
 	request string // The request string is set by calling Configure()
 }
 
-// QueryIdn returns the ID string read by *IDN?
-//func (f *Fluke) QueryIdn() (string, error) {
-//	return f.conn.QueryIdn()
-//}
+// New will return an instrument instance
+func New(port string) (*Fluke, error) {
+	dmm := &Fluke{}
+	dmm.Port = port
+	dmm.Timeout = 3000 * time.Millisecond
+	dmm.Eol = instr.Lf
+	err := dmm.Open(port)
+	if err != nil {
+		return nil, fmt.Errorf("error opening port, %s", err)
+	}
+	_ = dmm.Write("SYST:REM")
+	_ = dmm.Write("*RST")
+	time.Sleep(time.Millisecond * 50)
+	dmm.Name, err = dmm.Ask("*IDN?")
+	time.Sleep(time.Millisecond * 50)
+	if err != nil {
+		return nil, fmt.Errorf("no instrument found at %s", err)
+	}
+	if !strings.HasPrefix(dmm.Name, "FLUKE") {
+		return nil, fmt.Errorf("port %s has not a Fluke multimeter connected", port)
+	}
+	return dmm, nil
+}
 
 // Close will set the instrument to local and close connection
 func (f *Fluke) Close() {
 	time.Sleep(time.Millisecond * 50)
 	_ = f.Write("SYST:LOC")
-	time.Sleep(time.Millisecond * 50)
-	f.Close()
 }
 
 // Measure will do a measurement according to Configure(setup)
@@ -90,27 +107,4 @@ func (f *Fluke) Configure(s instr.Setup) error {
 	}
 	f.setup = s
 	return nil
-}
-
-// New will return an instrument instance
-func New(port string) (*Fluke, error) {
-	dmm := &Fluke{}
-	dmm.Port = port
-	dmm.Timeout = 3000 * time.Millisecond
-	dmm.Eol = instr.Lf
-	err := dmm.Open(port)
-	if err != nil {
-		return nil, fmt.Errorf("error opening port, %s", err)
-	}
-	_ = dmm.Write("SYST:REM")
-	_ = dmm.Write("*RST")
-	time.Sleep(time.Millisecond * 50)
-	dmm.Name, err = dmm.Ask("*IDN?")
-	if err != nil {
-		return nil, fmt.Errorf("no instrument found at %s", err)
-	}
-	if !strings.HasPrefix(dmm.Name, "FLUKE") {
-		return nil, fmt.Errorf("port %s has not a Fluke multimeter connected", port)
-	}
-	return dmm, nil
 }
