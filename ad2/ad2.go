@@ -6,10 +6,11 @@ package ad2
 import "C"
 import (
 	"fmt"
-	"go-measure/instr"
 	"math"
 	"os"
 	"time"
+
+	"github.com/jkvatne/go-measure/instr"
 )
 
 // Ad2 is the state data for the unit
@@ -21,6 +22,7 @@ type Ad2 struct {
 // New will create an instance
 func New() (*Ad2, error) {
 	a := &Ad2{}
+	a.Open()
 	return a, nil
 
 }
@@ -28,19 +30,26 @@ func New() (*Ad2, error) {
 // Open will initialize the Digilent Analog Discovery 2 unit
 // This function failed for unknown reasons. When moved directly to main it works ok.
 func (a *Ad2) Open() {
-	ver := C.CString("")
+	//ver := C.CString("")
 	//defer C.free(unsafe.Pointer(ver))
-	C.FDwfGetVersion(ver)
+	//C.FDwfGetVersion(ver)
 	if C.FDwfDeviceOpen(-1, &a.hdwf) == 0 {
 		fmt.Printf("No Digilent device found. Connect via USB.")
 		os.Exit(1)
 	}
-	fmt.Printf("Found Digilent SDK version " + C.GoString(ver) + "\n")
 	C.FDwfDeviceReset(a.hdwf)
-	//a.SetOutput(0, 0.0, 0.0)
-	//a.SetOutput(1, 0.0, 0.0)
-	// Master enable analog output
 	C.FDwfAnalogIOEnableSet(a.hdwf, 1)
+}
+
+// QueryIdn return name of instrument
+func (a *Ad2) QueryIdn() (string, error) {
+	ver := C.CString("")
+	//defer C.free(unsafe.Pointer(ver))
+	err := C.FDwfGetVersion(ver)
+	if err == 0 {
+		return "", fmt.Errorf("AD2 not found")
+	}
+	return "Digilent Analog Discovery 2, sdk v" + C.GoString(ver), nil
 }
 
 // Close will close the device
@@ -54,11 +63,6 @@ func (a *Ad2) Disable(ch instr.Chan) {
 		return
 	}
 	C.FDwfAnalogIOChannelNodeSet(a.hdwf, C.int(ch), 0, 0)
-}
-
-// QueryIdn return name of instrument
-func (a *Ad2) QueryIdn() (string, error) {
-	return "Digilent Analog Discovery 2", nil
 }
 
 // ChannelCount returns number of implemented channels
@@ -105,9 +109,9 @@ func (a *Ad2) SetOutput(ch instr.Chan, voltage float64, current float64) error {
 
 // SetupChannel will configure one channels range and offset and coupling
 func (a *Ad2) SetupChannel(ch instr.Chan, rng float64, offs float64, coupling string) error {
-	C.FDwfAnalogInChannelRangeSet(a.hdwf, ch, C.double(rng))
-	C.FDwfAnalogInChannelOffsetSet(a.hdwf, ch, C.double(offs)())
-	C.FDwfAnalogInChannelEnableSet(a.hdwf, ch, C.int(1))
+	C.FDwfAnalogInChannelRangeSet(a.hdwf, C.int(ch), C.double(rng))
+	C.FDwfAnalogInChannelOffsetSet(a.hdwf, C.int(ch), C.double(offs))
+	C.FDwfAnalogInChannelEnableSet(a.hdwf, C.int(ch), C.int(1))
 	if coupling != "DC" {
 		return fmt.Errorf("only DC coupling allowed")
 	}
@@ -135,7 +139,7 @@ func (a *Ad2) Measure(ch instr.Chan, typ string) (result float64, err error) {
 	}
 	var rgdAnalog [avgCnt]C.double
 	C.FDwfAnalogInStatusData(a.hdwf, C.int(0), &rgdAnalog[0], C.int(avgCnt)) // get channel 1 data
-	result = (rgdAnalog[0] + rgdAnalog[1] + rgdAnalog[2] + rgdAnalog[3] + rgdAnalog[4]) / float64(avgCnt)
+	result = float64(rgdAnalog[0]+rgdAnalog[1]+rgdAnalog[2]+rgdAnalog[3]+rgdAnalog[4]) / float64(avgCnt)
 	return result, nil
 }
 
@@ -189,11 +193,11 @@ func (a *Ad2) SetupTime(sampleInterval float64, offs float64, mode instr.SampleM
 	sampleInterval = sampleInterval / n
 	C.FDwfAnalogInFrequencySet(a.hdwf, C.double(1/sampleInterval))
 	if mode == instr.MinMax {
-		C.FDwfAnalogInChannelFilterSet(a.hdwf, C.filterMinMax)
+		C.FDwfAnalogInChannelFilterSet(a.hdwf, -1, C.filterMinMax)
 	} else if mode == instr.Average {
-		C.FDwfAnalogInChannelFilterSet(a.hdwf, C.filterAverage)
+		C.FDwfAnalogInChannelFilterSet(a.hdwf, -1, C.filterAverage)
 	} else if mode == instr.Sample {
-		C.FDwfAnalogInChannelFilterSet(a.hdwf, C.filterDecimate)
+		C.FDwfAnalogInChannelFilterSet(a.hdwf, -1, C.filterDecimate)
 	}
 	return nil
 }
