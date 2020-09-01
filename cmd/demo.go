@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/jkvatne/go-measure/dmm/fluke"
@@ -26,7 +27,7 @@ func main() {
 	}
 
 	o, err := tds2000.New("COM11")
-	if err != nil && o != nil {
+	if err == nil && o != nil {
 		fmt.Printf("Scope name is " + o.GetName())
 	} else {
 		fmt.Printf("No Osciloscope found\n")
@@ -40,7 +41,7 @@ func main() {
 		fmt.Printf("No Fluke multimeter found\n")
 	}
 
-	q, err := korad.New("COM11")
+	q, err := korad.New("COM12")
 	if q != nil {
 		name, _ := q.QueryIdn()
 		fmt.Printf("Korad n|ame is " + name)
@@ -48,7 +49,7 @@ func main() {
 		fmt.Printf("No Korad power supply found\n")
 	}
 
-	m, err := manualpsu.NewManualPsu()
+	m, err := manualpsu.NewManualPsu(os.Stdin, os.Stdout)
 	if err == nil {
 		name, _ := m.QueryIdn()
 		fmt.Printf("Connection name: %s\n", name)

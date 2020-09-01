@@ -3,7 +3,7 @@ package manualpsu
 import (
 	"bufio"
 	"fmt"
-	"os"
+	"io"
 	"strconv"
 
 	"github.com/jkvatne/go-measure/instr"
@@ -16,11 +16,15 @@ var _ instr.Psu = &ManualPsu{}
 type ManualPsu struct {
 	voltage [3]float64
 	current [3]float64
+	in      *bufio.Reader
+	out     *io.Writer
 }
 
 // NewManualPsu returns a PSU instance for the tti supply
-func NewManualPsu() (*ManualPsu, error) {
+func NewManualPsu(in io.Reader, out io.Writer) (*ManualPsu, error) {
 	psu := &ManualPsu{}
+	psu.in = bufio.NewReader(in)
+	psu.out = &out
 	return psu, nil
 }
 
@@ -37,7 +41,7 @@ func (p *ManualPsu) ChannelCount() int {
 // SetOutput will set output voltage and current limit for a given channel
 func (p *ManualPsu) SetOutput(ch instr.Chan, voltage float64, current float64) error {
 	fmt.Printf("Set PSU output %d to %0.3fV, %0.3fA and press <enter> :", ch, voltage, current)
-	_, _ = bufio.NewReader(os.Stdin).ReadBytes('\n')
+	_, _ = p.in.ReadBytes('\n')
 	p.voltage[ch] = voltage
 	p.current[ch] = current
 	return nil
@@ -51,14 +55,14 @@ func (p *ManualPsu) GetSetpoint(ch instr.Chan) (float64, float64, error) {
 // Disable will turn off the given output channel
 func (p *ManualPsu) Disable(ch instr.Chan) {
 	fmt.Printf("Turn off PSU output %d and press <enter> :", ch)
-	_, _ = bufio.NewReader(os.Stdin).ReadBytes('\n')
+	_, _ = p.in.ReadBytes('\n')
 	return
 }
 
 // GetOutput will return the actual output voltage and current from the channel
 func (p *ManualPsu) GetOutput(ch instr.Chan) (float64, float64, error) {
-	fmt.Printf("Get PSU current  %d and press <enter> : ", ch)
-	b, _ := bufio.NewReader(os.Stdin).ReadBytes('\n')
+	fmt.Fprintf(*p.out, "Get PSU current  %d and press <enter> : ", ch)
+	b, _ := p.in.ReadBytes('\n')
 	s := instr.ToString(b)
 	cur, _ := strconv.ParseFloat(s, 64)
 	return p.voltage[ch], cur, nil
@@ -66,5 +70,5 @@ func (p *ManualPsu) GetOutput(ch instr.Chan) (float64, float64, error) {
 
 // Close will turn off all outputs and close the communication
 func (p *ManualPsu) Close() {
-	fmt.Printf("Turn off power supply")
+	fmt.Fprint(*p.out, "Turn off power supply\n")
 }
