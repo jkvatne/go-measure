@@ -1,4 +1,4 @@
-module go-measure
+module github.com/jkvatne/go-measure
 
 go 1.14
 

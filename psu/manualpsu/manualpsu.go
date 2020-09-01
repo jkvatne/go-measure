@@ -3,9 +3,10 @@ package manualpsu
 import (
 	"bufio"
 	"fmt"
-	"go-measure/instr"
 	"os"
 	"strconv"
+
+	"github.com/jkvatne/go-measure/instr"
 )
 
 // Check if tti interface satisfies Psu interface

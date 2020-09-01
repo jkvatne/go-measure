@@ -6,11 +6,12 @@ package korad
 
 import (
 	"fmt"
-	"go-measure/instr"
 	"math"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jkvatne/go-measure/instr"
 )
 
 // Check if Psu interface satisfies Psu interface

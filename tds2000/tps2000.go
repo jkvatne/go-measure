@@ -2,11 +2,12 @@ package tds2000
 
 import (
 	"fmt"
-	"go-measure/alog"
-	"go-measure/instr"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jkvatne/go-measure/alog"
+	"github.com/jkvatne/go-measure/instr"
 )
 
 // Tps2000 defines a Tektronix oscilloscope in the Tps2000 series

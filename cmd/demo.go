@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"go-measure/dmm/fluke"
-	"go-measure/psu/cpx400"
-	"go-measure/psu/korad"
-	"go-measure/psu/manualpsu"
-	"go-measure/tds2000"
 	"time"
+
+	"github.com/jkvatne/go-measure/dmm/fluke"
+	"github.com/jkvatne/go-measure/psu/cpx400"
+	"github.com/jkvatne/go-measure/psu/korad"
+	"github.com/jkvatne/go-measure/psu/manualpsu"
+	"github.com/jkvatne/go-measure/tds2000"
 )
 
 func main() {

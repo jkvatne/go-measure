@@ -2,10 +2,11 @@ package fluke
 
 import (
 	"fmt"
-	"go-measure/instr"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jkvatne/go-measure/instr"
 )
 
 // Check if tti interface satisfies Psu interface
