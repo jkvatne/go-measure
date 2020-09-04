@@ -25,23 +25,24 @@ type Point struct {
 	x, y float64
 }
 
-// GetName will read the ID from the instrument.
-func (s *Tps2000) GetName() string {
+// QueryIdn will read the ID from the instrument.
+func (s *Tps2000) QueryIdn() (string, error) {
 	name, err := s.Ask("*IDN?")
 	if name == "" {
 		time.Sleep(100 * time.Millisecond)
 		name, err = s.Ask("*IDN?")
 	}
 	if err != nil {
-		return fmt.Sprintf("Error, %s", err)
+		return "", fmt.Errorf("Error, %s", err)
 	}
 	s.Connection.Name = name
-	return name
+	return name, nil
 }
 
 // Close will terminate connection
 func (s *Tps2000) Close() {
 	s.Connection.Close()
+	time.Sleep(200 * time.Millisecond)
 }
 
 // New is a Oscilloscope instance for the tti supply
@@ -55,7 +56,7 @@ func New(port string) (instr.Scope, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error opening port, %s", err)
 	}
-	osc.Connection.Name = osc.GetName()
+	osc.Connection.Name, err = osc.QueryIdn()
 	alog.Info("Connected to oscilloscope %s", osc.Connection.Name)
 	if !strings.HasPrefix(osc.Connection.Name, "TEKTRONIX,TPS 20") {
 		return nil, fmt.Errorf("port %s has not a Textronix osciloscope", port)
@@ -84,7 +85,7 @@ func (s *Tps2000) CurveInfo() error {
 }
 
 func (s *Tps2000) opc() string {
-	s.Write("*opc?")
+	_ = s.Write("*opc?")
 	return s.Read()
 }
 
@@ -102,14 +103,19 @@ func (s *Tps2000) Curve(channels []instr.Chan, samples int) (data [][]float64, e
 	*/
 
 	// Set binary encoding with lsb first
-	s.Write("DATA:WIDTH 1;START 1;STOP %d;ENCDG SRI", samples)
+	err = s.Write("DATA:WIDTH 1;START 1;STOP %d;ENCDG SRI", samples)
+	if err != nil {
+		return nil, err
+	}
 	// Read time (horizontal) scaling
-	resp, err := s.Ask("WFMPRE:CH%d:XINCR?", chanString[channels[0]])
+	resp, err := s.Ask("WFMPRE:" + chanString[channels[0]] + ":XINCR?")
 	if err != nil {
 		return nil, err
 	}
 	xIncr, _ := strconv.ParseFloat(resp, 64)
-
+	if xIncr == 0.0 {
+		return nil, fmt.Errorf("time/div is missing")
+	}
 	// Generate time sequence
 	var timeData []float64
 	for i := 0; i < samples; i++ {
@@ -118,8 +124,8 @@ func (s *Tps2000) Curve(channels []instr.Chan, samples int) (data [][]float64, e
 	data = append(data, timeData)
 
 	for _, channel := range channels {
-		s.Write("DATA:SOURCE ch" + chanString[channel])
-		s.Write("CURVE?")
+		_ = s.Write("DATA:SOURCE " + chanString[channel])
+		_ = s.Write("CURVE?")
 		s.Timeout = 5 * time.Second
 		values := s.Connection.ReadBinary()
 		if len(values) < 5 {
@@ -168,7 +174,7 @@ func (s *Tps2000) Curve(channels []instr.Chan, samples int) (data [][]float64, e
 // If Chan=TRIG (0) then the trigger frequency will be returned. This is much more accurate than the
 // frequency determined from a channels waveform
 func (s *Tps2000) Measure(ch instr.Chan, typ string) (float64, error) {
-	if ch < instr.Ch1 || ch > instr.Ch4 {
+	if (ch < instr.Ch1 || ch > instr.Ch4) && ch != instr.TRIG {
 		return 0.0, fmt.Errorf("%s is illegal channel", chanString[ch])
 	}
 	var resp string
@@ -219,10 +225,10 @@ func (s *Tps2000) SetupChannel(ch instr.Chan, rng float64, offs float64, couplin
 }
 
 // SetupTime will set samples pr second and trigger offset
-func (s *Tps2000) SetupTime(sampleTime float64, offs float64, mode instr.SampleMode) error {
+func (s *Tps2000) SetupTime(sampleIntervalSec float64, xPosSec float64, mode instr.SampleMode) error {
 	// The scope allways store 2500 samples for a full 10 divisions or 250 s/div
 	// Samples pr sec is then
-	nr := fmt.Sprintf("%0.3e", sampleTime*250)
+	nr := fmt.Sprintf("%0.3e", sampleIntervalSec*250)
 	// Make sure it is in the 1-2.5-5 sequence
 	if nr[0:4] != "1.00" && nr[0:4] != "2.50" && nr[0:4] != "5.00" {
 		return fmt.Errorf("time pr div must be 1/2.5/5")
@@ -239,7 +245,7 @@ func (s *Tps2000) SetupTime(sampleTime float64, offs float64, mode instr.SampleM
 	if err != nil {
 		return err
 	}
-	_ = s.Write("HOR:POS %0.3g", offs)
+	_ = s.Write("HOR:MAI:POS %0.3g", xPosSec)
 	return nil
 }
 
@@ -248,15 +254,16 @@ var slopeString = [...]string{"FALL", "RISE"}
 var chanString = [...]string{"", "CH1", "CH2", "CH3", "CH4", "EXT", "EXT5", "EXT10", "AC LINE"}
 
 // SetupTrigger will define scope trigger settings
-func (s *Tps2000) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, slope instr.Slope, trigLevel float64, auto bool, holdoff float64) {
+func (s *Tps2000) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, slope instr.Slope, trigLevel float64, auto bool, xPos float64) {
 	_ = s.Write("TRIG:MAIN:EDGE:COUP " + couplingString[coupling])
 	_ = s.Write("TRIG:MAIN:EDGE:SLOPE " + slopeString[slope])
 	_ = s.Write("TRIG:MAIN:EDGE:SOURCE " + slopeString[sourceChan])
-	_ = s.Write("TRIG:MAIN:HOLDOFF:VALUE %0.3e", holdoff)
+	_ = s.Write("TRIG:MAIN:HOLDOFF:VALUE %0.3e", 0.02)
 	_ = s.Write("TRIG:MAIN:LEVEL %0.4e", trigLevel)
 	if auto {
 		_ = s.Write("TRIG:MAIN:MODE AUTO", trigLevel)
 	} else {
 		_ = s.Write("TRIG:MAIN:MODE NORMAL", trigLevel)
 	}
+	_ = s.Write("HOR:DELAY:POS %0.4e", xPos)
 }

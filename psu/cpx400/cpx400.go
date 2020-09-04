@@ -57,7 +57,7 @@ func (psu *Cpx400) Disable(ch instr.Chan) {
 	if ch < 1 || ch > 2 {
 		return
 	}
-	psu.Write("OP%d 0", ch)
+	_ = psu.Write("OP%d 0", ch)
 }
 
 // GetOutput will return the actual output voltage and current from the channel

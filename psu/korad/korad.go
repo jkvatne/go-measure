@@ -76,7 +76,7 @@ func (psu *Psu) SetOutput(ch instr.Chan, voltage float64, current float64) error
 // Disable will turn off the given output channel
 // Korad has no disable option, so we set the output to 0V/0A
 func (psu *Psu) Disable(ch instr.Chan) {
-	psu.SetOutput(ch, 0, 0)
+	_ = psu.SetOutput(ch, 0, 0)
 }
 
 // GetOutput will return the actual output voltage and current from the channel

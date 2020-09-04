@@ -87,7 +87,7 @@ func (i *Connection) Close() {
 // Write will send a commend to the instrument, adding end of line characters
 func (i *Connection) Write(s string, args ...interface{}) error {
 	if args != nil {
-		s = fmt.Sprintf(s, args)
+		s = fmt.Sprintf(s, args...)
 	}
 	if i.conn == nil {
 		return fmt.Errorf("writing to invalic port")
@@ -150,7 +150,7 @@ func (i *Connection) Flush() {
 func (i *Connection) Ask(query string, args ...interface{}) (string, error) {
 	i.Flush()
 	if args != nil {
-		query = fmt.Sprintf(query, args)
+		query = fmt.Sprintf(query, args...)
 	}
 	query = i.addEol(query)
 	err := i.Write(query)

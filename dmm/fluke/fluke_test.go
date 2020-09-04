@@ -2,9 +2,10 @@ package fluke_test
 
 import (
 	"fmt"
-	"go-measure/dmm/fluke"
-	"go-measure/instr"
 	"testing"
+
+	"github.com/jkvatne/go-measure/dmm/fluke"
+	"github.com/jkvatne/go-measure/instr"
 
 	"github.com/stretchr/testify/assert"
 )

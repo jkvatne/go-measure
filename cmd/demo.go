@@ -23,7 +23,7 @@ func main() {
 		fmt.Printf("No Fluke multimeter found\n")
 	}
 
-	a, err := ad2.New()
+	a, err := ad2.New("")
 	if err == nil {
 		name, _ := a.QueryIdn()
 		fmt.Printf("Found %s\n", name)
@@ -37,13 +37,18 @@ func main() {
 		time.Sleep(500 * time.Millisecond)
 		u, i, _ := p.GetOutput(1)
 		fmt.Printf("Readback %0.3fV, %0.3fA\n", u, i)
-	} else {
+	} else if err != nil {
 		fmt.Printf("Error: %s\n", err.Error())
 	}
 
 	o, err := tds2000.New("COM11")
 	if err == nil && o != nil {
-		fmt.Printf("Found " + o.GetName() + "\n")
+		idn, err := o.QueryIdn()
+		if err != nil {
+			fmt.Printf("Error reading IDN, " + err.Error() + "\n")
+		} else {
+			fmt.Printf("Found " + idn + "\n")
+		}
 	} else {
 		fmt.Printf("No Osciloscope found\n")
 	}

@@ -180,7 +180,7 @@ func getRegistryValue(buf []byte, dataType uint32) (interface{}, error) {
 		return binary.BigEndian.Uint32(buf), nil
 	case windows.REG_MULTI_SZ:
 		bufW := bufToUTF16(buf)
-		a := []string{}
+		var a []string
 		for i := 0; i < len(bufW); {
 			j := i + wcslen(bufW[i:])
 			if i < j {

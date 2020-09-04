@@ -4,11 +4,11 @@ package cpx400_test
 
 import (
 	"fmt"
-	"go-measure/instr"
-	"go-measure/psu/cpx400"
-	"go-measure/psu/manualpsu"
 	"testing"
 	"time"
+
+	"github.com/jkvatne/go-measure/instr"
+	"github.com/jkvatne/go-measure/psu/cpx400"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -19,14 +19,6 @@ func TestTtiPsu(t *testing.T) {
 	fmt.Printf("Test TTI supply using port %s\n", TtiPort)
 	p, err := cpx400.New(TtiPort)
 	assert.NoError(t, err, "Failed to open %s", TtiPort)
-	commonTest(t, p)
-	p.Close()
-}
-
-func TestManualPsu(t *testing.T) {
-	fmt.Printf("Test manual supply using stdin/stdout\n")
-	p, err := manualpsu.NewManualPsu()
-	assert.NoError(t, err, "Failed to open manual korad", TtiPort)
 	commonTest(t, p)
 	p.Close()
 }

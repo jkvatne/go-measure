@@ -1,6 +1,8 @@
 package instr
 
-// Sample mode indicates the descimation mode going from the raw sampling interval
+// Package instr defines common interfaces
+
+// SampleMode indicates the decimation mode going from the raw sampling interval
 // to the time between stored samples
 type SampleMode int
 
@@ -29,12 +31,13 @@ type Slope int
 const (
 	Rising Slope = iota
 	Falling
+	Either
 )
 
 // Scope is an oscilloscope definition
 type Scope interface {
 	// GetName will return the *IDN? string
-	GetName() string
+	QueryIdn() (string, error)
 	// SetupChannel where rng is 10*volt/div
 	SetupChannel(ch Chan, rng float64, offset float64, coupling Coupling) error
 	// SetupTime will set sampling time and offset

@@ -5,15 +5,17 @@ package korad_test
 
 import (
 	"fmt"
-	"go-measure/psu/korad"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/jkvatne/go-measure/psu/korad"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestKorad(t *testing.T) {
+	time.Sleep(time.Millisecond * 100)
 	p, err := korad.New("")
 	assert.NoError(t, err, "Failed to open COM port")
 	if err != nil {
