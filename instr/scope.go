@@ -45,7 +45,7 @@ type Scope interface {
 	// mode is
 	SetupTime(sampleTime float64, offs float64, sampleMode SampleMode) error
 	// SetupTrigger will set main trigger parameters
-	SetupTrigger(sourceChan Chan, coupling Coupling, slope Slope, trigLevel float64, auto bool, holdoff float64)
+	SetupTrigger(sourceChan Chan, coupling Coupling, slope Slope, trigLevel float64, auto bool, xPos float64) error
 	// Measure data on channel. Type may vary, typical FREQUENCY, CRMS etc
 	Measure(ch Chan, typ string) (float64, error)
 	// Return the data points for a single scan on selected channels

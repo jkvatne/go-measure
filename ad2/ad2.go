@@ -37,13 +37,14 @@ const (
 
 // Ad2 is the state data for the unit
 type Ad2 struct {
-	hdwf          C.HDWF
-	voltage       [4]float64
-	MaxBuffer     int
-	MinBuffer     int
-	DriverVersion string
-	devNo         int
-	isOpen        bool
+	hdwf              C.HDWF
+	voltage           [4]float64
+	MaxBuffer         int
+	MinBuffer         int
+	DriverVersion     string
+	devNo             int
+	isOpen            bool
+	sampleIntervalSec float64
 }
 
 // TDeviceInfo is info about each device connected
@@ -56,17 +57,12 @@ type TDeviceInfo struct {
 // DeviceInfo is an array of DeviceInfo
 var DeviceInfo []TDeviceInfo
 
-// GetName will read the ID from the instrument.
+// QueryIdn will read the ID from the instrument.
 func (a *Ad2) QueryIdn() (string, error) {
 	if a.isOpen {
 		return DeviceInfo[a.devNo].Name + " " + DeviceInfo[a.devNo].SerialNumber, nil
 	}
 	return "", fmt.Errorf("not open")
-}
-
-// Curve will return a dataset (points) of 2500 points scaled
-func (a *Ad2) Curve(channels []instr.Chan, samples int) (data [][]float64, err error) {
-	return nil, nil
 }
 
 // Enumerate will list all devices
@@ -103,6 +99,7 @@ func Enumerate() {
 func New(sno string) (*Ad2, error) {
 	a := &Ad2{}
 	err := a.Open(sno)
+	C.FDwfAnalogInReset(a.hdwf)
 	return a, err
 
 }
@@ -192,9 +189,9 @@ func (a *Ad2) SetOutput(ch instr.Chan, voltage float64, current float64) error {
 
 // SetupChannel will configure one channels range and offset and coupling
 func (a *Ad2) SetupChannel(ch instr.Chan, rng float64, offs float64, coupling instr.Coupling) error {
-	e := C.FDwfAnalogInChannelRangeSet(a.hdwf, C.int(ch), C.double(rng))
-	e &= C.FDwfAnalogInChannelOffsetSet(a.hdwf, C.int(ch), C.double(offs))
-	e &= C.FDwfAnalogInChannelEnableSet(a.hdwf, C.int(ch), C.int(1))
+	e := C.FDwfAnalogInChannelRangeSet(a.hdwf, C.int(ch-instr.Ch1), C.double(rng))
+	e &= C.FDwfAnalogInChannelOffsetSet(a.hdwf, C.int(ch-instr.Ch1), C.double(offs))
+	e &= C.FDwfAnalogInChannelEnableSet(a.hdwf, C.int(ch-instr.Ch1), 1)
 	if coupling != instr.DC {
 		return fmt.Errorf("only DC coupling allowed")
 	}
@@ -214,7 +211,7 @@ func (a *Ad2) Measure(ch instr.Chan, typ string) (result float64, err error) {
 	e &= C.FDwfAnalogInConfigure(a.hdwf, C.int(0), C.int(1))
 	for {
 		var sts C.uchar
-		C.FDwfAnalogInStatus(a.hdwf, C.int(1), &sts)
+		C.FDwfAnalogInStatus(a.hdwf, 1, &sts)
 		if sts == C.DwfStateDone {
 			break
 		}
@@ -274,8 +271,9 @@ func (a *Ad2) SetupTime(sampleIntervalSec float64, xPosSec float64, mode instr.S
 	// The Ad2 samples at 100Msps. The filter constant determine how to go
 	//from n input sample to 1 stored sample.
 	n := math.Round(sampleIntervalSec * 100e6)
-	sampleIntervalSec = sampleIntervalSec / n
-	C.FDwfAnalogInFrequencySet(a.hdwf, C.double(1/sampleIntervalSec))
+	a.sampleIntervalSec = n / 100e6
+	sampleFreq := C.double(100e6 / n)
+	C.FDwfAnalogInFrequencySet(a.hdwf, sampleFreq)
 	if mode == instr.MinMax {
 		C.FDwfAnalogInChannelFilterSet(a.hdwf, -1, C.filterMinMax)
 	} else if mode == instr.Average {
@@ -283,30 +281,68 @@ func (a *Ad2) SetupTime(sampleIntervalSec float64, xPosSec float64, mode instr.S
 	} else if mode == instr.Sample {
 		C.FDwfAnalogInChannelFilterSet(a.hdwf, -1, C.filterDecimate)
 	}
-	C.FDwfAnalogInBufferSizeSet(a.hdwf, C.int(a.MaxBuffer))
-	// Set aquisition mode for a single scan.
-	C.FDwfAnalogInAcquisitionModeSet(a.hdwf, C.acqmodeSingle)
-	C.FDwfAnalogInTriggerPositionSet(a.hdwf, C.double(xPosSec))
 	return nil
 }
 
 // SetupTrigger will set trigger conditions
-func (a *Ad2) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, slope instr.Slope, trigLevel float64, auto bool, holdoffSec float64) {
-	C.FDwfAnalogInTriggerConditionSet(a.hdwf, C.int(slope))
+func (a *Ad2) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, slope instr.Slope, trigLevel float64, auto bool, xPos float64) error {
+	if sourceChan <= instr.Ch2 && sourceChan >= instr.Ch1 {
+		C.FDwfAnalogInTriggerSourceSet(a.hdwf, C.trigsrcDetectorAnalogIn)
+	} else if sourceChan == instr.EXT {
+		C.FDwfAnalogInTriggerSourceSet(a.hdwf, C.trigsrcExternal1)
+	}
+	C.FDwfAnalogInTriggerTypeSet(a.hdwf, C.trigtypeEdge)
+	if slope == instr.Rising {
+		C.FDwfAnalogInTriggerConditionSet(a.hdwf, C.DwfTriggerSlopeRise)
+	} else if slope == instr.Falling {
+		C.FDwfAnalogInTriggerConditionSet(a.hdwf, C.DwfTriggerSlopeFall)
+	} else if slope == instr.Either {
+		C.FDwfAnalogInTriggerConditionSet(a.hdwf, C.DwfTriggerSlopeEither)
+	}
 	C.FDwfAnalogInTriggerLevelSet(a.hdwf, C.double(trigLevel))
 	if auto {
 		// In auto mode, trigger after 20mS timeout
 		C.FDwfAnalogInTriggerAutoTimeoutSet(a.hdwf, 0.02)
 	} else {
-		C.FDwfAnalogInTriggerAutoTimeoutSet(a.hdwf, 0)
+		C.FDwfAnalogInTriggerAutoTimeoutSet(a.hdwf, 0.0)
 	}
-	C.FDwfAnalogInTriggerHoldOffSet(a.hdwf, C.double(holdoffSec))
+	C.FDwfAnalogInTriggerHoldOffSet(a.hdwf, 0.0)
 	C.FDwfAnalogInTriggerChannelSet(a.hdwf, C.int(int(sourceChan)-int(instr.Ch1)))
-	if sourceChan <= instr.Ch2 && sourceChan >= instr.Ch1 {
-		C.FDwfAnalogInTriggerSourceSet(a.hdwf, C.trigsrcDetectorAnalogIn)
-	} else if sourceChan == instr.EXT {
-		C.FDwfAnalogInTriggerSourceSet(a.hdwf, C.trigsrcDetectorAnalogIn)
+	C.FDwfAnalogInTriggerPositionSet(a.hdwf, C.double(xPos))
+	return nil
+}
+
+// Curve will return a dataset (points) of 2500 points scaled
+func (a *Ad2) Curve(channels []instr.Chan, samples int) (data [][]float64, err error) {
+	if samples > a.MaxBuffer {
+		return nil, fmt.Errorf("%d samles, max is %d", samples, a.MaxBuffer)
 	}
+	C.FDwfAnalogInBufferSizeSet(a.hdwf, C.int(samples))
+	// Set aquisition mode for a single scan.
+	C.FDwfAnalogInAcquisitionModeSet(a.hdwf, C.acqmodeSingle)
+
+	C.FDwfAnalogInConfigure(a.hdwf /*fReconfigure*/, 0 /*fStart*/, 1)
+	tStart := time.Now()
+	for true {
+		var sts C.DwfState
+		C.FDwfAnalogInStatus(a.hdwf, C.int(1), &sts)
+		if sts == C.DwfStateDone || time.Since(tStart) > time.Second*10 {
+			break
+		}
+	}
+	fmt.Printf("Used %dmS", time.Since(tStart)/1000000)
+	var timeData []float64
+	for i := 0; i < samples; i++ {
+		timeData = append(timeData, float64(i)*a.sampleIntervalSec)
+	}
+	data = append(data, timeData)
+
+	for _, channel := range channels {
+		chanFloat := make([]float64, samples)
+		C.FDwfAnalogInStatusData(a.hdwf, C.int(channel-instr.Ch1), (*C.double)(&chanFloat[0]), C.int(samples))
+		data = append(data, chanFloat)
+	}
+	return data, nil
 }
 
 func init() {

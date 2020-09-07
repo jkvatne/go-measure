@@ -254,7 +254,7 @@ var slopeString = [...]string{"FALL", "RISE"}
 var chanString = [...]string{"", "CH1", "CH2", "CH3", "CH4", "EXT", "EXT5", "EXT10", "AC LINE"}
 
 // SetupTrigger will define scope trigger settings
-func (s *Tps2000) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, slope instr.Slope, trigLevel float64, auto bool, xPos float64) {
+func (s *Tps2000) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, slope instr.Slope, trigLevel float64, auto bool, xPos float64) error {
 	_ = s.Write("TRIG:MAIN:EDGE:COUP " + couplingString[coupling])
 	_ = s.Write("TRIG:MAIN:EDGE:SLOPE " + slopeString[slope])
 	_ = s.Write("TRIG:MAIN:EDGE:SOURCE " + slopeString[sourceChan])
@@ -265,5 +265,6 @@ func (s *Tps2000) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, s
 	} else {
 		_ = s.Write("TRIG:MAIN:MODE NORMAL", trigLevel)
 	}
-	_ = s.Write("HOR:DELAY:POS %0.4e", xPos)
+	err := s.Write("HOR:DELAY:POS %0.4e", xPos)
+	return err
 }
