@@ -26,11 +26,12 @@ type Psu struct {
 
 // New returns a PSU instance for the korad supply
 func New(port string) (*Psu, error) {
-	if port == "" {
-		instr.FindSerialPort("KD3005P", 9600)
-	}
 	psu := &Psu{}
+	psu.Eol = instr.None
 	psu.Connection.Baudrate = 9600
+	if port == "" {
+		port = instr.FindSerialPort("KD3005P", 9600, instr.None)
+	}
 	err := psu.Open(port)
 	if err != nil {
 		return nil, fmt.Errorf("error opening port, %s", err)
@@ -49,23 +50,24 @@ func (psu *Psu) ChannelCount() int {
 
 // SetOutput will set output voltage and current limit for a given channel
 func (psu *Psu) SetOutput(ch instr.Chan, voltage float64, current float64) error {
-	// Korad has no enable command, so we save the setpoints and set outputs to zero if not enabled
-	psu.voltage = voltage
-	psu.current = current
 	// The output voltage rate of change is ca 10V/sec
 	var wait time.Duration
 	if voltage > psu.voltage {
 		wait = 100 * time.Millisecond
 	} else {
-		wait = 50*time.Millisecond + time.Duration(math.Round(math.Abs(voltage-psu.voltage)*30))*time.Millisecond
+		wait = 50*time.Millisecond + time.Duration(math.Round(math.Abs(voltage-psu.voltage)*100))*time.Millisecond
 	}
+	psu.voltage = voltage
+	psu.current = current
 	// Set output voltage
 	err := psu.Connection.Write("VSET%d:%0.2f", ch, voltage)
+	time.Sleep(20 * time.Millisecond)
 	if err != nil {
 		return err
 	}
 	// Set current limit
 	err = psu.Write("ISET%d:%0.3f", ch, current)
+	time.Sleep(20 * time.Millisecond)
 	if err != nil {
 		return err
 	}

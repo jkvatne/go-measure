@@ -19,7 +19,7 @@ func TestKorad(t *testing.T) {
 	p, err := korad.New("")
 	assert.NoError(t, err, "Failed to open COM port")
 	if err != nil {
-		fmt.Printf("Error opening port %s, %s\n", "COM9", err)
+		fmt.Printf("Error opening port %s, %s\n", "COM14", err)
 		os.Exit(1)
 	}
 	id, err := p.Ask("*IDN?")
@@ -43,7 +43,7 @@ func TestKorad(t *testing.T) {
 	err = p.SetOutput(1, 24.0, 0.2)
 	assert.NoError(t, err, "set output 1")
 
-	time.Sleep(400 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 	volt, current, err = p.GetOutput(1)
 	assert.NoError(t, err, "get output 1")
 	assert.InDelta(t, 24.0, volt, 0.1, "voltage 1 setpoint")
@@ -53,9 +53,15 @@ func TestKorad(t *testing.T) {
 	assert.InDelta(t, 24.0, volt, 0.1, "voltage 1 setpoint")
 	assert.InDelta(t, 0.2, current, 0.1, "voltage 1 setpoint")
 
+	fmt.Printf("Set output to 12.0V\n")
+	err = p.SetOutput(1, 12.0, 0.2)
+	assert.NoError(t, err, "set output 1")
+	volt, current, err = p.GetSetpoint(1)
+	assert.InDelta(t, 12.0, volt, 0.1, "voltage 1 setpoint")
+	assert.InDelta(t, 0.2, current, 0.1, "voltage 1 setpoint")
+
 	// Turn off output
 	p.Disable(1)
-	time.Sleep(400 * time.Millisecond)
 	assert.NoError(t, err, "set output 1")
 	volt, current, err = p.GetOutput(1)
 	assert.NoError(t, err, "get output 1")

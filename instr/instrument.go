@@ -178,12 +178,12 @@ func CheckSerialPort(port string) error {
 
 // FindSerialPort will return the name of the last (highest numbered)
 // serial port that is not in use already
-func FindSerialPort(id string, baudrate int) string {
+func FindSerialPort(id string, baudrate int, eol eol) string {
 	list, desc, _ := EnumerateSerialPorts()
 	highest := ""
 	for i := len(list) - 1; i >= 0; i-- {
 		if !strings.Contains(desc[i], "Bluetooth") && CheckSerialPort(list[i]) == nil {
-			c := &Connection{Name: list[i], Baudrate: baudrate, Timeout: time.Second}
+			c := &Connection{Name: list[i], Baudrate: baudrate, Timeout: time.Second / 10, Eol: eol}
 			err := c.Open(list[i])
 			if err == nil {
 				highest = list[i]
