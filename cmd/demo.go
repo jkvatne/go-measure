@@ -41,19 +41,23 @@ func drawScope(x, y int) {
 func update(w fyne.Window) {
 	n := 0
 	size := fyne.Size{500, 500}
+	time.Sleep(time.Millisecond * 80)
 	for {
-		time.Sleep(time.Second)
-		//drawScope(size.Width, size.Height)
-
 		n = n + 10
+		fyneImg.Refresh()
 		size = fyneImg.Size()
 		scopeImg = image.NewRGBA(image.Rect(0, 0, size.Width, size.Height))
 		draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
-		Rect(scopeImg, image.Pt(10, 10), image.Pt(size.Width-10, size.Height-10), colornames.Yellow, 1)
-		Line(scopeImg, image.Pt(40, 140), image.Pt(250, 140+n), colornames.Blue, 2)
+		p1 := image.Pt(30, 10)
+		p2 := image.Pt(30, size.Height-20)
+		p3 := image.Pt(size.Width-10, size.Height-20)
+		Ticks(scopeImg, p1, p3)
+		vNum(scopeImg, p1, p2, 1, -1)
+		hNum(scopeImg, p2, p3, 1e-3, 50e-3)
 		fyneImg.Image = scopeImg
 		fyneImg.Refresh()
 		fmt.Printf("W=%d, H=%d\n", size.Width, size.Height)
+		time.Sleep(time.Second)
 	}
 
 }
@@ -77,9 +81,6 @@ func main() {
 	scopeImg = image.NewRGBA(b)
 	draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
 	fyneImg = canvas.NewImageFromImage(scopeImg)
-	NewLabel(scopeImg, 50, 50, "Tekst", colornames.White)
-	Label(scopeImg, 50, 100, "Regular", colornames.White, Regular10)
-	Label(scopeImg, 50, 120, "Regular", colornames.White, Regular12)
 	top := widget.NewLabelWithStyle("Oscilloscope", fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
 	btm := widget.NewLabelWithStyle("Bottom", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	w.SetContent(fyne.NewContainerWithLayout(
