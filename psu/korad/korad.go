@@ -1,6 +1,8 @@
-// korad is an interface to the KD3005 series power supplies.
-// An example is the Elfa RND320 supply
-// It is special in that it does not use CR/LF as command endings, but depends on timeouts.
+// Package korad is an interface to the Korad KD3005 series power supplies.
+// An example is the Elfa RND320 supply. It is also sold under other names.
+// It is very special in that it does not use CR/LF as command endings, but depends on timeouts.
+// Commands terminated with LF or anything else will fail, and gives no response.
+// Also, two commands must be separated by at least 50mS.
 
 package korad
 
