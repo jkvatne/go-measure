@@ -1,4 +1,4 @@
-package tds2000_test
+package tps2000_test
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jkvatne/go-measure/instr"
-	"github.com/jkvatne/go-measure/tds2000"
+	"github.com/jkvatne/go-measure/tps2000"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -16,9 +16,9 @@ func setupTest(t *testing.T) instr.Scope {
 	list, _, err := instr.EnumerateSerialPorts()
 	assert.NoError(t, err, "Error fetching com port list")
 	assert.True(t, len(list) > 0, "No ports found")
-	o, err := tds2000.New("")
+	o, err := tps2000.New("")
 	assert.NoError(t, err, "Failed to open COM port")
-	assert.NotNil(t, o, "tds2000.New() returned nil")
+	assert.NotNil(t, o, "tps2000.New() returned nil")
 	return o
 }
 

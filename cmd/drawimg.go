@@ -1,13 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
-	"math"
-
-	"golang.org/x/image/colornames"
 
 	"github.com/goki/freetype/truetype"
 
@@ -18,120 +14,11 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-func Ticks(img draw.Image, p1, p3 image.Point) {
-	p2 := image.Point{X: p1.X, Y: p3.Y}
-	p4 := image.Point{X: p3.X, Y: p1.Y}
-	Rect(scopeImg, p1, p3, colornames.Gray, 1)
-	vTicks(img, p1, p2, 10, 16)
-	vTicks(img, p1, p2, 20, 8)
-	vTicks(img, p1, p2, 100, 4)
-	vTicks(img, p4, p3, 10, -16)
-	vTicks(img, p4, p3, 20, -8)
-	vTicks(img, p4, p3, 100, -4)
-	hTicks(img, p2, p3, 10, -16)
-	hTicks(img, p2, p3, 20, -8)
-	hTicks(img, p2, p3, 100, -4)
-	hTicks(img, p1, p4, 10, 16)
-	hTicks(img, p1, p4, 20, 8)
-	hTicks(img, p1, p4, 100, 4)
-	h := p3.Y - p1.Y
-	for i := 0; i < 10; i++ {
-		hDot(img, p1.X, p3.X, p1.Y+i*h/10, colornames.Gray)
+func minmax(x, y int) (int, int) {
+	if x < y {
+		return x, y
 	}
-	w := p3.X - p1.X
-	for i := 0; i < 10; i++ {
-		vDot(img, p1.X+i*w/10, p1.Y, p3.Y, colornames.Gray)
-	}
-}
-
-func hDot(img draw.Image, x1, x2, y int, c color.Color) {
-	for x := x1; x < x2; x += 4 {
-		img.Set(x, y, c)
-	}
-}
-
-func vDot(img draw.Image, x, y1, y2 int, c color.Color) {
-	for y := y1; y < y2; y += 4 {
-		img.Set(x, y, c)
-	}
-}
-
-func vTicks(img draw.Image, p1, p2 image.Point, n, dx int) {
-	h := p2.Y - p1.Y
-	for i := 0; i < n; i++ {
-		y := p1.Y + i*h/n
-		Line(img, image.Point{X: p1.X, Y: y}, image.Point{X: p1.X + dx, Y: y}, colornames.Gray, 1)
-	}
-}
-
-func hNum(img draw.Image, p1, p2 image.Point, t1, t2 float64) {
-	tmax := math.Max(t1, t2)
-	unit := "s"
-	if tmax < 1e-6 {
-		unit = "nS"
-		t1 = t1 * 1e9
-		t2 = t2 * 1e9
-	} else if tmax < 1e-3 {
-		unit = "uS"
-		t1 = t1 * 1e6
-		t2 = t2 * 1e6
-	} else if tmax < 1.0 {
-		unit = "mS"
-		t1 = t1 * 1e3
-		t2 = t2 * 1e3
-	} else {
-		unit = "S"
-		t1 = t1
-		t2 = t2
-	}
-	dp := 0
-	v := math.Max(t1, t2)
-	if v >= 100.0 {
-		dp = 0
-	} else if v >= 10.0 {
-		dp = 1
-	} else if v >= 1.0 {
-		dp = 2
-	} else {
-		dp = 3
-	}
-	w := p2.X - p1.X
-	for i := 0; i <= 10; i++ {
-		x := p1.X + i*w/10
-		val := t1 + float64(i)*(t2-t1)/10
-		s := fmt.Sprintf("%0.*f", dp, val) + unit
-		Label(img, x, p1.Y+10, s, colornames.White, Regular10)
-	}
-}
-
-func vNum(img draw.Image, p1, p2 image.Point, topVal, btmVal float64) {
-	h := p2.Y - p1.Y
-	dp := 1
-	v := math.Max(math.Abs(topVal), math.Abs(btmVal))
-	if v >= 100.0 {
-		dp = 0
-	} else if v >= 10.0 {
-		dp = 1
-	} else if v >= 1.0 {
-		dp = 2
-	} else {
-		dp = 3
-	}
-	for i := 0; i <= 10; i++ {
-		y := p1.Y + i*h/10
-		val := topVal - float64(i)*(topVal-btmVal)/10
-		s := fmt.Sprintf("%0.*f", dp, val)
-		dx := Measure(s, Regular10) + 1
-		Label(img, p1.X-dx, y+h10/2, s, colornames.White, Regular10)
-	}
-}
-
-func hTicks(img draw.Image, p1, p2 image.Point, n, dy int) {
-	w := p2.X - p1.X
-	for i := 0; i < n; i++ {
-		x := p1.X + i*w/n
-		Line(img, image.Point{X: x, Y: p1.Y}, image.Point{X: x, Y: p2.Y + dy}, colornames.Gray, 1)
-	}
+	return y, x
 }
 
 func Rect(img draw.Image, p0, p2 image.Point, c color.Color, w int) {

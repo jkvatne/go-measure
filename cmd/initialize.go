@@ -28,7 +28,7 @@ package main
 		fmt.Printf("Error: %s\n", err.Error())
 	}
 
-	o, err := tds2000.New("COM11")
+	o, err := tps2000.New("COM11")
 	if err == nil && o != nil {
 		idn, err := o.QueryIdn()
 		if err != nil {

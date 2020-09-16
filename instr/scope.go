@@ -50,6 +50,8 @@ type Scope interface {
 	Measure(ch Chan, typ string) (float64, error)
 	// Return the data points for a single scan on selected channels
 	Curve(channels []Chan, samples int) ([][]float64, error)
+	// GetTime will return horizontal settings
+	GetTime() (sampleIntervalSec float64, xPosSec float64)
 	// Close will close communication channel
 	Close()
 }

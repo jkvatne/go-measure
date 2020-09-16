@@ -6,6 +6,11 @@ import (
 	"image/draw"
 	"time"
 
+	"github.com/jkvatne/go-measure/instr"
+
+	"github.com/jkvatne/go-measure/alog"
+	"github.com/jkvatne/go-measure/tps2000"
+
 	"fyne.io/fyne"
 	"fyne.io/fyne/app"
 	"fyne.io/fyne/canvas"
@@ -18,64 +23,73 @@ import (
 var fyneImg *canvas.Image
 var scopeImg *image.RGBA
 
-func doResize() {
-	//m := glfw.GetMonitors()[0].GetVideoMode()
-	//scopeImg = image.NewRGBA(image.Rect(0, 0, 500, height-200))
-	//draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
-	//fyneImg = canvas.NewImageFromImage(scopeImg)
-}
+type event int
 
-/*
-func drawScope(x, y int) {
-	p1 := fyne.Position{0, 0}
-	p2 := fyne.Position{x, y}
-	scope = fyne.NewContainer()
-	scope.AddObject(&canvas.Line{Position1: p1, Position2: p2, StrokeColor: colornames.Black, StrokeWidth: 1})
-	grid := &canvas.Rectangle{StrokeColor: colornames.Black, StrokeWidth: 1}
-	grid.Move(fyne.Position{X: 50, Y: 50})
-	grid.Resize(fyne.Size{Width: x - 100, Height: y - 100})
-	scope.AddObject(grid)
-}
-*/
+const (
+	updateEvent event = iota
+	resizeEvent
+	doneEevnt
+)
 
-func update(w fyne.Window) {
-	n := 0
-	size := fyne.Size{500, 500}
-	time.Sleep(time.Millisecond * 80)
+var events chan event
+
+func handleEvents(w fyne.Window) {
+	time.Sleep(time.Second)
 	for {
-		n = n + 10
-		fyneImg.Refresh()
-		size = fyneImg.Size()
+		select {
+		case e := <-events:
+			if e == doneEevnt {
+				return
+			}
+			update(w, e)
+		}
+	}
+}
+
+func update(w fyne.Window, e event) {
+	time.Sleep(time.Millisecond * 80)
+	size := fyneImg.Size()
+	if e == resizeEvent {
 		scopeImg = image.NewRGBA(image.Rect(0, 0, size.Width, size.Height))
 		draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
-		p1 := image.Pt(30, 10)
-		p2 := image.Pt(30, size.Height-20)
-		p3 := image.Pt(size.Width-10, size.Height-20)
-		Ticks(scopeImg, p1, p3)
-		vNum(scopeImg, p1, p2, 1, -1)
-		hNum(scopeImg, p2, p3, 1e-3, 50e-3)
 		fyneImg.Image = scopeImg
-		fyneImg.Refresh()
-		fmt.Printf("W=%d, H=%d\n", size.Width, size.Height)
-		time.Sleep(time.Second)
 	}
-
+	Grid(scopeImg, 0, 1e-3, 10, -10)
+	fyneImg.Refresh()
 }
 
-func minmax(x, y int) (int, int) {
-	if x < y {
-		return x, y
+func resize() {
+	events <- resizeEvent
+}
+
+var data [][]float64
+
+// FetchCurve will read points from scope
+func FetchCurve(scope instr.Scope) {
+	fmt.Printf("Fetch curve\n")
+	var err error
+	data, err = scope.Curve([]instr.Chan{instr.Ch1}, 2500)
+	if err != nil {
+		alog.Error("Error fetching curve, %s", err)
 	}
-	return y, x
+	resize()
 }
 
 func main() {
+	events = make(chan event)
+	scope, err := tps2000.New("")
+	if err != nil {
+		alog.Error("No scope found")
+	}
+
+	sampleInterval, xPos := scope.GetTime()
+	alog.Info("sampleInterval=%0.3e, xpos=%0.3e", sampleInterval, xPos)
+
 	a := app.NewWithID("io.fyne.demo")
 	w := a.NewWindow("Analog Discovery2 scope")
-	fmt.Printf("Done\n")
 
 	m := glfw.GetMonitors()[0].GetVideoMode()
-	fmt.Printf("W=%d, H=%d\n", m.Width, m.Height)
+	fmt.Printf("Monitor W=%d, H=%d\n", m.Width, m.Height)
 
 	b := image.Rect(0, 0, 1024, 712)
 	scopeImg = image.NewRGBA(b)
@@ -94,7 +108,7 @@ func main() {
 	//w.Maximize()
 	w.Resize(fyne.Size{1000, 750})
 	w.CenterOnScreen()
-	go update(w)
+	go handleEvents(w)
+	resize()
 	w.ShowAndRun()
-	fmt.Printf("Done\n")
 }

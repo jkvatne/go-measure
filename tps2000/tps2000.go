@@ -1,4 +1,4 @@
-package tds2000
+package tps2000
 
 import (
 	"fmt"
@@ -48,7 +48,7 @@ func (s *Tps2000) Close() {
 // New is a Oscilloscope instance for the tti supply
 func New(port string) (instr.Scope, error) {
 	if port == "" {
-		port = instr.FindSerialPort("TEKTRONIX", 19200)
+		port = instr.FindSerialPort("TEKTRONIX", 19200, instr.Lf)
 	}
 	conn := instr.Connection{Port: port, Baudrate: 19200, Timeout: 500 * time.Millisecond, Eol: instr.Lf}
 	osc := &Tps2000{Connection: conn}
@@ -86,7 +86,7 @@ func (s *Tps2000) CurveInfo() error {
 
 func (s *Tps2000) opc() string {
 	_ = s.Write("*opc?")
-	return s.Read()
+	return s.ReadString()
 }
 
 // Curve will return a dataset (points) of 2500 points scaled
@@ -127,42 +127,43 @@ func (s *Tps2000) Curve(channels []instr.Chan, samples int) (data [][]float64, e
 		_ = s.Write("DATA:SOURCE " + chanString[channel])
 		_ = s.Write("CURVE?")
 		s.Timeout = 5 * time.Second
-		values := s.Connection.ReadBinary()
-		if len(values) < 5 {
-			return nil, fmt.Errorf("no data for channel %s", chanString[channel])
-		} else if values[0] != 35 || values[1] < 48 || values[1] > 52 {
+		b := s.Connection.ReadByte()
+		if b != 35 {
 			return nil, fmt.Errorf("data should start with #1, #2 or #3")
 		}
-		n := int(values[2] - 48)
-		if values[1] >= 50 {
-			n = n*10 + int(values[3]) - 48
+		// Get number of digits in length field
+		nd := int(s.Connection.ReadByte())
+		if nd < 48 || nd > 52 {
+			return nil, fmt.Errorf("data should start with #1, #2 or #3")
 		}
-		if values[1] >= 51 {
-			n = n*10 + int(values[4]) - 48
+		n := 0
+		for i := 0; i < nd-48; i++ {
+			n = n*10 + int(s.Connection.ReadByte()) - 48
 		}
-		if values[1] >= 52 {
-			n = n*10 + int(values[5]) - 48
-		}
-		start := int(values[1]) - 48 + 2
 		if n != samples {
 			return nil, fmt.Errorf("wrong length of data")
 		}
 		s.Timeout = time.Second
+		values := make([]byte, n)
+		time.Sleep(time.Second * time.Duration(samples*10) / time.Duration(s.Baudrate))
+		actual := s.Connection.Read(values)
+		if actual != samples {
+			return nil, fmt.Errorf("wrong length of data")
+		}
 		// Read channel scaling
-		resp, _ = s.Ask("WFMPRE:YMULT?")
-		yScale, err := strconv.ParseFloat(resp, 64)
+		yScale, err := s.PollFloat("WFMPRE:YMULT?")
 		if err != nil {
-			return nil, fmt.Errorf("error reading channel scaling")
+			return nil, fmt.Errorf("error reading channel scaling YMULT")
 		}
 
-		resp, err = s.Ask("WFMPRE:YOFF?")
-		yOffset, err := strconv.ParseFloat(resp, 64)
+		yOffset, err := s.PollFloat("WFMPRE:YOFF?")
 		if err != nil {
-			return nil, fmt.Errorf("error reading channel scaling")
+			return nil, fmt.Errorf("error reading channel scaling YOFF")
 		}
 		var chanData []float64
-		for i := start; i < start+samples; i++ {
-			chanData = append(chanData, (float64(values[i])-yOffset)*yScale)
+		for i := 0; i < samples; i++ {
+			v := (float64(values[i]) - yOffset) * yScale
+			chanData = append(chanData, v)
 		}
 		data = append(data, chanData)
 	}
@@ -247,6 +248,13 @@ func (s *Tps2000) SetupTime(sampleIntervalSec float64, xPosSec float64, mode ins
 	}
 	_ = s.Write("HOR:MAI:POS %0.3g", xPosSec)
 	return nil
+}
+
+// GetTime will return horizontal settings
+func (s *Tps2000) GetTime() (sampleIntervalSec float64, xPosSec float64) {
+	sampleIntervalSec, _ = s.PollFloat("HOR:MAI:SCA?")
+	xPosSec, _ = s.PollFloat("HOR:MAI:POS?")
+	return sampleIntervalSec, xPosSec
 }
 
 var couplingString = [...]string{"DC", "DC", "AC", "DC", "HFR", "LFR", "NOISE"}

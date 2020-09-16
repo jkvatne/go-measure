@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,7 +66,7 @@ func (i *Connection) Open(portName string) error {
 			i.Baudrate = 115200
 		}
 		// Default to a interval timeout equal to one character length  (11 bits)
-		c := &serial.Config{Name: portName, Baud: i.Baudrate, ReadTimeout: time.Second, IntervalTimeout: time.Duration(11e9 / i.Baudrate)}
+		c := &serial.Config{Name: portName, Baud: i.Baudrate, ReadTimeout: time.Second, IntervalTimeout: time.Duration(2e11 / i.Baudrate)}
 		i.conn, err = serial.OpenPort(c)
 	} else {
 		i.conn, err = net.DialTimeout("tcp", portName, 1000*time.Millisecond)
@@ -106,15 +107,21 @@ func (i *Connection) Write(s string, args ...interface{}) error {
 	return nil
 }
 
-// ReadBinary will return an array of bytes
-func (i *Connection) ReadBinary() []byte {
-	b := make([]byte, 1024)
-	n, _ := i.conn.Read(b)
-	return b[:n]
+// ReadByte will return an array of bytes
+func (i *Connection) ReadByte() byte {
+	b := make([]byte, 1)
+	_, _ = i.conn.Read(b)
+	return b[0]
 }
 
-// Read will read any response from the instrument, with given timeout
-func (i *Connection) Read() string {
+// ReadBinary will return an array of bytes
+func (i *Connection) Read(b []byte) int {
+	n, _ := i.conn.Read(b)
+	return n
+}
+
+// ReadString will read any response from the instrument, with given timeout
+func (i *Connection) ReadString() string {
 	if i.conn == nil {
 		return ""
 	}
@@ -157,8 +164,21 @@ func (i *Connection) Ask(query string, args ...interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	response := i.Read()
+	response := i.ReadString()
 	return response, nil
+}
+
+// PollFloat will read a float64 value
+func (i *Connection) PollFloat(query string, args ...interface{}) (float64, error) {
+	s, err := i.Ask(query, args...)
+	if err != nil {
+		return 0.0, err
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0.0, err
+	}
+	return f, nil
 }
 
 // CheckSerialPort takes a serial port name
