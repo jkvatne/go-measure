@@ -20,7 +20,7 @@ func Grid(img draw.Image, t1, t2 float64, voltTop, voltBtm float64) {
 	bl := image.Pt(tl.X, br.Y)
 	tr := image.Pt(br.X, tl.Y)
 	// Voltage labels
-	vNum(scopeImg, tl, bl, t1, -1)
+	vNum(scopeImg, tl, bl, voltTop, voltBtm)
 	// Time labels
 	hNum(scopeImg, bl, br, t1, t2)
 	// Frame around grid
@@ -102,11 +102,11 @@ func hNum(img draw.Image, p1, p2 image.Point, t1, t2 float64) {
 		dp = 3
 	}
 	w := p2.X - p1.X
-	for i := 0; i <= 10; i++ {
+	for i := 1; i <= 10; i++ {
 		x := p1.X + i*w/10
 		val := t1 + float64(i)*(t2-t1)/10
 		s := fmt.Sprintf("%0.*f", dp, val) + unit
-		Label(img, x, p1.Y+10, s, colornames.White, Regular10)
+		Label(img, x-8, p1.Y+10, s, colornames.White, Regular10)
 	}
 }
 
@@ -137,5 +137,39 @@ func hTicks(img draw.Image, p1, p2 image.Point, n, dy int) {
 	for i := 0; i < n; i++ {
 		x := p1.X + i*w/n
 		Line(img, image.Point{X: x, Y: p1.Y}, image.Point{X: x, Y: p2.Y + dy}, colornames.Gray, 1)
+	}
+}
+
+func plot(img *image.RGBA, data [][]float64) {
+	if data == nil {
+		return
+	}
+	tl := img.Bounds().Min.Add(image.Pt(30, 10))
+	br := img.Bounds().Max.Add(image.Pt(-20, -20))
+	bl := image.Pt(tl.X, br.Y)
+	tr := image.Pt(br.X, tl.Y)
+	for ch := 0; ch < len(data)-3; ch++ {
+		col := colornames.Yellow
+		switch ch {
+		case 1:
+			col = colornames.Cyan
+		case 2:
+			col = colornames.Magenta
+		case 3:
+			col = colornames.Green
+		}
+		voltTop := data[len(data)-2][ch]
+		voltBtm := data[len(data)-1][ch]
+		y0 := tl.Y + int(float64(bl.Y-tl.Y)*data[1][0]/10.0)
+		x0 := tl.X + int(float64(tr.X-tl.X)*data[0][0]/data[0][len(data[0])-1])
+		for i := 0; i < len(data[0]); i++ {
+			y1 := bl.Y + int(float64(tl.Y-bl.Y)*(data[ch+1][i]-voltBtm)/(voltTop-voltBtm))
+			x1 := tl.X + int(float64(tr.X-tl.X)*data[0][i]/data[0][len(data[0])-1])
+			p1 := image.Point{x0, y0}
+			p2 := image.Point{x1, y1}
+			Line(img, p1, p2, col, 1)
+			x0 = x1
+			y0 = y1
+		}
 	}
 }

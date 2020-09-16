@@ -28,10 +28,6 @@ type Point struct {
 // QueryIdn will read the ID from the instrument.
 func (s *Tps2000) QueryIdn() (string, error) {
 	name, err := s.Ask("*IDN?")
-	if name == "" {
-		time.Sleep(100 * time.Millisecond)
-		name, err = s.Ask("*IDN?")
-	}
 	if err != nil {
 		return "", fmt.Errorf("Error, %s", err)
 	}
@@ -50,7 +46,7 @@ func New(port string) (instr.Scope, error) {
 	if port == "" {
 		port = instr.FindSerialPort("TEKTRONIX", 19200, instr.Lf)
 	}
-	conn := instr.Connection{Port: port, Baudrate: 19200, Timeout: 500 * time.Millisecond, Eol: instr.Lf}
+	conn := instr.Connection{Port: port, Baudrate: 19200, Timeout: 750 * time.Millisecond, Eol: instr.Lf}
 	osc := &Tps2000{Connection: conn}
 	err := osc.Open(port)
 	if err != nil {
@@ -69,7 +65,7 @@ func (s *Tps2000) ButtonLights(on bool) {
 	if on {
 		_ = s.Write("POW:BUTTONLIGHT ON")
 	} else {
-		_ = s.Write("POW:BUTTONLIGHT ON")
+		_ = s.Write("POW:BUTTONLIGHT OFF")
 	}
 }
 
@@ -91,17 +87,6 @@ func (s *Tps2000) opc() string {
 
 // Curve will return a dataset (points) of 2500 points scaled
 func (s *Tps2000) Curve(channels []instr.Chan, samples int) (data [][]float64, err error) {
-	/*
-		s.Write("DESE 1") // enable *opc in device event status enable register
-		s.Write("*ESE 1") // enable *opc in event status enable register
-		s.Write("*SRE 0")
-		s.Write("acquire:stopafter sequence; state on")
-		s.Write("trigger force")
-		for s.opc() == "0" {
-			time.Sleep(time.Millisecond * 200)
-		}
-	*/
-
 	// Set binary encoding with lsb first
 	err = s.Write("DATA:WIDTH 1;START 1;STOP %d;ENCDG SRI", samples)
 	if err != nil {
@@ -122,7 +107,8 @@ func (s *Tps2000) Curve(channels []instr.Chan, samples int) (data [][]float64, e
 		timeData = append(timeData, float64(i)*xIncr)
 	}
 	data = append(data, timeData)
-
+	var yMax []float64
+	var yMin []float64
 	for _, channel := range channels {
 		_ = s.Write("DATA:SOURCE " + chanString[channel])
 		_ = s.Write("CURVE?")
@@ -155,18 +141,20 @@ func (s *Tps2000) Curve(channels []instr.Chan, samples int) (data [][]float64, e
 		if err != nil {
 			return nil, fmt.Errorf("error reading channel scaling YMULT")
 		}
-
 		yOffset, err := s.PollFloat("WFMPRE:YOFF?")
 		if err != nil {
 			return nil, fmt.Errorf("error reading channel scaling YOFF")
 		}
+		yMax = append(yMax, (125-yOffset)*yScale)
+		yMin = append(yMin, (-125-yOffset)*yScale)
 		var chanData []float64
 		for i := 0; i < samples; i++ {
-			v := (float64(values[i]) - yOffset) * yScale
+			v := (float64(int8(values[i])) - yOffset) * yScale
 			chanData = append(chanData, v)
 		}
 		data = append(data, chanData)
 	}
+	data = append(data, yMax, yMin)
 	return data, nil
 }
 

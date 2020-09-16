@@ -66,7 +66,7 @@ func (i *Connection) Open(portName string) error {
 			i.Baudrate = 115200
 		}
 		// Default to a interval timeout equal to one character length  (11 bits)
-		c := &serial.Config{Name: portName, Baud: i.Baudrate, ReadTimeout: time.Second, IntervalTimeout: time.Duration(2e11 / i.Baudrate)}
+		c := &serial.Config{Name: portName, Baud: i.Baudrate, ReadTimeout: i.Timeout, IntervalTimeout: time.Duration(1e12 / i.Baudrate)}
 		i.conn, err = serial.OpenPort(c)
 	} else {
 		i.conn, err = net.DialTimeout("tcp", portName, 1000*time.Millisecond)
@@ -203,7 +203,7 @@ func FindSerialPort(id string, baudrate int, eol eol) string {
 	highest := ""
 	for i := len(list) - 1; i >= 0; i-- {
 		if !strings.Contains(desc[i], "Bluetooth") && CheckSerialPort(list[i]) == nil {
-			c := &Connection{Name: list[i], Baudrate: baudrate, Timeout: time.Second / 10, Eol: eol}
+			c := &Connection{Name: list[i], Baudrate: baudrate, Timeout: time.Second / 5, Eol: eol}
 			err := c.Open(list[i])
 			if err == nil {
 				highest = list[i]

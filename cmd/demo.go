@@ -22,12 +22,13 @@ import (
 
 var fyneImg *canvas.Image
 var scopeImg *image.RGBA
+var data [][]float64
 
 type event int
 
 const (
 	updateEvent event = iota
-	resizeEvent
+	evRefresh
 	doneEevnt
 )
 
@@ -41,38 +42,52 @@ func handleEvents(w fyne.Window) {
 			if e == doneEevnt {
 				return
 			}
-			update(w, e)
+			update(e)
 		}
 	}
 }
 
-func update(w fyne.Window, e event) {
-	time.Sleep(time.Millisecond * 80)
+func update(e event) {
+	time.Sleep(time.Millisecond * 500)
 	size := fyneImg.Size()
-	if e == resizeEvent {
+	if e == evRefresh {
 		scopeImg = image.NewRGBA(image.Rect(0, 0, size.Width, size.Height))
 		draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
 		fyneImg.Image = scopeImg
 	}
-	Grid(scopeImg, 0, 1e-3, 10, -10)
+	t1 := 0.0
+	t2 := 1.0e-3
+	voltTop := 10.0
+	voltBtm := -10.0
+	if data != nil {
+		t1 = data[0][0]
+		t2 = data[0][len(data[0])-1]
+		voltTop = data[len(data)-2][0]
+		voltBtm = data[len(data)-1][0]
+	}
+	Grid(scopeImg, t1, t2, voltTop, voltBtm)
+	plot(scopeImg, data)
 	fyneImg.Refresh()
 }
 
-func resize() {
-	events <- resizeEvent
+func refresh() {
+	events <- evRefresh
 }
-
-var data [][]float64
 
 // FetchCurve will read points from scope
 func FetchCurve(scope instr.Scope) {
 	fmt.Printf("Fetch curve\n")
 	var err error
-	data, err = scope.Curve([]instr.Chan{instr.Ch1}, 2500)
+	data, err = scope.Curve([]instr.Chan{instr.Ch1, instr.Ch2, instr.Ch3, instr.Ch4}, 2500)
 	if err != nil {
 		alog.Error("Error fetching curve, %s", err)
 	}
-	resize()
+	refresh()
+}
+
+func getCurve(scope instr.Scope) {
+	time.Sleep(500 * time.Millisecond)
+	FetchCurve(scope)
 }
 
 func main() {
@@ -109,6 +124,7 @@ func main() {
 	w.Resize(fyne.Size{1000, 750})
 	w.CenterOnScreen()
 	go handleEvents(w)
-	resize()
+	go getCurve(scope)
+	refresh()
 	w.ShowAndRun()
 }
