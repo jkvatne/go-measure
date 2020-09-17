@@ -6,10 +6,11 @@ import (
 	"image/draw"
 	"time"
 
+	"github.com/jkvatne/go-measure/ad2"
+
 	"github.com/jkvatne/go-measure/instr"
 
 	"github.com/jkvatne/go-measure/alog"
-	"github.com/jkvatne/go-measure/tps2000"
 
 	"fyne.io/fyne"
 	"fyne.io/fyne/app"
@@ -57,15 +58,15 @@ func update(e event) {
 	}
 	t1 := 0.0
 	t2 := 1.0e-3
-	voltTop := 10.0
-	voltBtm := -10.0
+	//voltTop := 10.0
+	//voltBtm := -10.0
 	if data != nil {
 		t1 = data[0][0]
 		t2 = data[0][len(data[0])-1]
-		voltTop = data[len(data)-2][0]
-		voltBtm = data[len(data)-1][0]
+		//voltTop = data[len(data)-2][0]
+		//voltBtm = data[len(data)-1][0]
 	}
-	Grid(scopeImg, t1, t2, voltTop, voltBtm)
+	Grid(scopeImg, t1, t2, data[len(data)-2], data[len(data)-1])
 	plot(scopeImg, data)
 	fyneImg.Refresh()
 }
@@ -78,7 +79,7 @@ func refresh() {
 func FetchCurve(scope instr.Scope) {
 	fmt.Printf("Fetch curve\n")
 	var err error
-	data, err = scope.Curve([]instr.Chan{instr.Ch1, instr.Ch2, instr.Ch3, instr.Ch4}, 2500)
+	data, err = scope.Curve([]instr.Chan{instr.Ch1, instr.Ch2}, 2500)
 	if err != nil {
 		alog.Error("Error fetching curve, %s", err)
 	}
@@ -90,16 +91,33 @@ func getCurve(scope instr.Scope) {
 	FetchCurve(scope)
 }
 
+// SetupAd2 will initialize Digilent Analog Discovery 2
+func SetupAd2(a *ad2.Ad2, freq float64) error {
+	err := a.SetOutput(0, 3.0, 0.0)
+	err = a.SetOutput(1, -2.0, 0.0)
+	err = a.SetAnalogOut(instr.Ch1, freq, 0.0, ad2.WfSine, 2.0, 0)
+	err = a.SetAnalogOut(instr.Ch2, freq, 90.0, ad2.WfSine, 2.0, 0)
+	a.StartAnalogOut(instr.TRIG)
+	err = a.SetupChannel(instr.Ch1, 10.0, 1.0, instr.DC)
+	err = a.SetupChannel(instr.Ch2, 10.0, -1.0, instr.DC)
+	err = a.SetupTrigger(instr.Ch1, instr.DC, instr.Rising, 0.0, false, 0.0)
+	sampleInterval := 1.0 / 2500.0 / freq
+	err = a.SetupTime(sampleInterval, 0.0, instr.Sample)
+
+	return err
+}
+
 func main() {
 	events = make(chan event)
-	scope, err := tps2000.New("")
+	//scope, err := tps2000.New("")
+	scope, err := ad2.New("")
 	if err != nil {
 		alog.Error("No scope found")
 	}
-
-	sampleInterval, xPos := scope.GetTime()
-	alog.Info("sampleInterval=%0.3e, xpos=%0.3e", sampleInterval, xPos)
-
+	err = SetupAd2(scope, 1000)
+	if err != nil {
+		alog.Error("Error setting up AD2")
+	}
 	a := app.NewWithID("io.fyne.demo")
 	w := a.NewWindow("Analog Discovery2 scope")
 

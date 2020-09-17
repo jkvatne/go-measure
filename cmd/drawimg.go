@@ -77,7 +77,7 @@ func Measure(label string, face font.Face) int {
 	return (int(d.MeasureString(label)) + 63) / 64
 }
 
-func Label(img draw.Image, x, y int, label string, c color.RGBA, face font.Face) {
+func Label(img draw.Image, x, y int, label string, c color.Color, face font.Face) {
 	d := &font.Drawer{
 		Dst:  img,
 		Src:  image.NewUniform(c),

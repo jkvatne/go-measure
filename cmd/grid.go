@@ -10,8 +10,19 @@ import (
 	"golang.org/x/image/colornames"
 )
 
+var ChanColor = []color.Color{
+	colornames.Yellow,
+	colornames.Cyan,
+	colornames.Magenta,
+	colornames.Green,
+	colornames.Red,
+	colornames.Gray,
+	colornames.White,
+	colornames.Beige,
+}
+
 // Grid will draw a oscilloscope grid with labels.
-func Grid(img draw.Image, t1, t2 float64, voltTop, voltBtm float64) {
+func Grid(img draw.Image, t1, t2 float64, voltTop, voltBtm []float64) {
 	// Fill black background
 	draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
 	// The four corners of the grid
@@ -20,7 +31,11 @@ func Grid(img draw.Image, t1, t2 float64, voltTop, voltBtm float64) {
 	bl := image.Pt(tl.X, br.Y)
 	tr := image.Pt(br.X, tl.Y)
 	// Voltage labels
-	vNum(scopeImg, tl, bl, voltTop, voltBtm)
+	for i := 0; i < len(voltTop); i++ {
+		t := tl.Add(image.Pt(0, i*12))
+		b := bl.Add(image.Pt(0, i*12))
+		vNum(scopeImg, t, b, voltTop[i], voltBtm[i], ChanColor[i])
+	}
 	// Time labels
 	hNum(scopeImg, bl, br, t1, t2)
 	// Frame around grid
@@ -110,7 +125,7 @@ func hNum(img draw.Image, p1, p2 image.Point, t1, t2 float64) {
 	}
 }
 
-func vNum(img draw.Image, p1, p2 image.Point, topVal, btmVal float64) {
+func vNum(img draw.Image, p1, p2 image.Point, topVal, btmVal float64, col color.Color) {
 	h := p2.Y - p1.Y
 	dp := 1
 	v := math.Max(math.Abs(topVal), math.Abs(btmVal))
@@ -128,7 +143,7 @@ func vNum(img draw.Image, p1, p2 image.Point, topVal, btmVal float64) {
 		val := topVal - float64(i)*(topVal-btmVal)/10
 		s := fmt.Sprintf("%0.*f", dp, val)
 		dx := Measure(s, Regular10) + 1
-		Label(img, p1.X-dx, y+h10/2, s, colornames.White, Regular10)
+		Label(img, p1.X-dx, y+h10/2, s, col, Regular10)
 	}
 }
 
@@ -148,18 +163,20 @@ func plot(img *image.RGBA, data [][]float64) {
 	br := img.Bounds().Max.Add(image.Pt(-20, -20))
 	bl := image.Pt(tl.X, br.Y)
 	tr := image.Pt(br.X, tl.Y)
-	for ch := 0; ch < len(data)-3; ch++ {
-		col := colornames.Yellow
-		switch ch {
-		case 1:
-			col = colornames.Cyan
-		case 2:
-			col = colornames.Magenta
-		case 3:
-			col = colornames.Green
+	chanNum := len(data) - 1
+	// Check that y range is present
+	scalingPresent := len(data[0]) >= 4 && len(data[len(data)-1]) <= 16 && len(data[len(data)-2]) <= 16
+	if scalingPresent {
+		chanNum = chanNum - 2
+	}
+	for ch := 0; ch < len(data[len(data)-2]); ch++ {
+		col := ChanColor[ch]
+		voltTop := +10.0
+		voltBtm := -10.0
+		if scalingPresent {
+			voltTop = data[len(data)-2][ch]
+			voltBtm = data[len(data)-1][ch]
 		}
-		voltTop := data[len(data)-2][ch]
-		voltBtm := data[len(data)-1][ch]
 		y0 := tl.Y + int(float64(bl.Y-tl.Y)*data[1][0]/10.0)
 		x0 := tl.X + int(float64(tr.X-tl.X)*data[0][0]/data[0][len(data[0])-1])
 		for i := 0; i < len(data[0]); i++ {

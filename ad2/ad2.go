@@ -45,6 +45,8 @@ type Ad2 struct {
 	devNo             int
 	isOpen            bool
 	sampleIntervalSec float64
+	Offset            [2]float64
+	Range             [2]float64
 }
 
 // TDeviceInfo is info about each device connected
@@ -99,7 +101,18 @@ func Enumerate() {
 func New(sno string) (*Ad2, error) {
 	a := &Ad2{}
 	err := a.Open(sno)
+	time.Sleep(100 * time.Millisecond)
 	C.FDwfAnalogInReset(a.hdwf)
+	var rng C.double
+	var ofs C.double
+	C.FDwfAnalogInChannelRangeGet(a.hdwf, C.int(0), &rng)
+	C.FDwfAnalogInChannelOffsetGet(a.hdwf, C.int(0), &ofs)
+	a.Range[0] = float64(rng)
+	a.Offset[0] = float64(ofs)
+	C.FDwfAnalogInChannelRangeGet(a.hdwf, C.int(1), &rng)
+	C.FDwfAnalogInChannelOffsetGet(a.hdwf, C.int(1), &ofs)
+	a.Range[1] = float64(rng)
+	a.Offset[1] = float64(ofs)
 	return a, err
 
 }
@@ -188,10 +201,12 @@ func (a *Ad2) SetOutput(ch instr.Chan, voltage float64, current float64) error {
 }
 
 // SetupChannel will configure one channels range and offset and coupling
-func (a *Ad2) SetupChannel(ch instr.Chan, rng float64, offs float64, coupling instr.Coupling) error {
+func (a *Ad2) SetupChannel(ch instr.Chan, rng float64, ofs float64, coupling instr.Coupling) error {
 	e := C.FDwfAnalogInChannelRangeSet(a.hdwf, C.int(ch-instr.Ch1), C.double(rng))
-	e &= C.FDwfAnalogInChannelOffsetSet(a.hdwf, C.int(ch-instr.Ch1), C.double(offs))
+	e &= C.FDwfAnalogInChannelOffsetSet(a.hdwf, C.int(ch-instr.Ch1), C.double(ofs))
 	e &= C.FDwfAnalogInChannelEnableSet(a.hdwf, C.int(ch-instr.Ch1), 1)
+	a.Range[ch-1] = rng
+	a.Offset[ch-1] = ofs
 	if coupling != instr.DC {
 		return fmt.Errorf("only DC coupling allowed")
 	}
@@ -342,7 +357,24 @@ func (a *Ad2) Curve(channels []instr.Chan, samples int) (data [][]float64, err e
 		C.FDwfAnalogInStatusData(a.hdwf, C.int(channel-instr.Ch1), (*C.double)(&chanFloat[0]), C.int(samples))
 		data = append(data, chanFloat)
 	}
+
+	min := []float64{}
+	max := []float64{}
+	for _, channel := range channels {
+		max = append(max, a.Range[channel-1]/2-a.Offset[channel-1])
+		min = append(min, -a.Range[channel-1]/2-a.Offset[channel-1])
+	}
+	data = append(data, max, min)
 	return data, nil
+}
+
+// GetTime will return horizontal settings
+func (a *Ad2) GetTime() (sampleIntervalSec float64, xPosSec float64) {
+	var sampleFreq C.double
+	C.FDwfAnalogInFrequencySet(a.hdwf, sampleFreq)
+	sampleIntervalSec = 1 / float64(sampleFreq)
+	xPosSec = 0.0
+	return
 }
 
 func init() {
