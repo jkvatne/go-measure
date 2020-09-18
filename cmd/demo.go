@@ -6,6 +6,9 @@ import (
 	"image/draw"
 	"time"
 
+	"fyne.io/fyne/layout"
+	"fyne.io/fyne/widget"
+
 	"github.com/jkvatne/go-measure/ad2"
 
 	"github.com/jkvatne/go-measure/instr"
@@ -15,8 +18,6 @@ import (
 	"fyne.io/fyne"
 	"fyne.io/fyne/app"
 	"fyne.io/fyne/canvas"
-	"fyne.io/fyne/layout"
-	"fyne.io/fyne/widget"
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"golang.org/x/image/colornames"
 )
@@ -27,6 +28,11 @@ var data [][]float64
 
 type event int
 
+type aScopeFrame struct {
+	window fyne.Window
+	canvas fyne.CanvasObject
+}
+
 const (
 	updateEvent event = iota
 	evRefresh
@@ -35,7 +41,7 @@ const (
 
 var events chan event
 
-func handleEvents(w fyne.Window) {
+func handleEvents(w fyne.Window, f *aScopeFrame) {
 	time.Sleep(time.Second)
 	for {
 		select {
@@ -43,36 +49,32 @@ func handleEvents(w fyne.Window) {
 			if e == doneEevnt {
 				return
 			}
-			update(e)
+			update(e, f)
 		}
 	}
 }
 
-func update(e event) {
+func update(e event, f *aScopeFrame) {
 	time.Sleep(time.Millisecond * 500)
 	size := fyneImg.Size()
+	//size := f.canvas.Size()
 	if e == evRefresh {
 		scopeImg = image.NewRGBA(image.Rect(0, 0, size.Width, size.Height))
-		draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
+		draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Blue), image.Pt(0, 0), draw.Src)
 		fyneImg.Image = scopeImg
 	}
 	t1 := 0.0
 	t2 := 1.0e-3
-	//voltTop := 10.0
-	//voltBtm := -10.0
 	if data != nil {
 		t1 = data[0][0]
 		t2 = data[0][len(data[0])-1]
-		//voltTop = data[len(data)-2][0]
-		//voltBtm = data[len(data)-1][0]
 	}
 	Grid(scopeImg, t1, t2, data[len(data)-2], data[len(data)-1])
 	plot(scopeImg, data)
 	fyneImg.Refresh()
-}
 
-func refresh() {
-	events <- evRefresh
+	//f.canvas = canvas.NewRasterFromImage(scopeImg)
+	//f.refresh()
 }
 
 // FetchCurve will read points from scope
@@ -83,12 +85,12 @@ func FetchCurve(scope instr.Scope) {
 	if err != nil {
 		alog.Error("Error fetching curve, %s", err)
 	}
-	refresh()
 }
 
 func getCurve(scope instr.Scope) {
 	time.Sleep(500 * time.Millisecond)
 	FetchCurve(scope)
+	events <- evRefresh
 }
 
 // SetupAd2 will initialize Digilent Analog Discovery 2
@@ -107,7 +109,23 @@ func SetupAd2(a *ad2.Ad2, freq float64) error {
 	return err
 }
 
+func (f *aScopeFrame) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	f.canvas.Resize(size)
+}
+
+func (f *aScopeFrame) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	return fyne.NewSize(320, 240)
+}
+
+func (f *aScopeFrame) refresh() {
+	f.window.Canvas().Refresh(f.canvas)
+}
+
 func main() {
+	a := app.NewWithID("io.fyne.demo")
+	window := a.NewWindow("Scope")
+	window.SetPadded(false)
+
 	events = make(chan event)
 	//scope, err := tps2000.New("")
 	scope, err := ad2.New("")
@@ -118,31 +136,44 @@ func main() {
 	if err != nil {
 		alog.Error("Error setting up AD2")
 	}
-	a := app.NewWithID("io.fyne.demo")
-	w := a.NewWindow("Analog Discovery2 scope")
 
 	m := glfw.GetMonitors()[0].GetVideoMode()
 	fmt.Printf("Monitor W=%d, H=%d\n", m.Width, m.Height)
 
-	b := image.Rect(0, 0, 1024, 712)
+	b := image.Rect(0, 0, 1000, 700)
 	scopeImg = image.NewRGBA(b)
-	draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
+	draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Red), image.Pt(0, 0), draw.Src)
 	fyneImg = canvas.NewImageFromImage(scopeImg)
 	top := widget.NewLabelWithStyle("Oscilloscope", fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
-	btm := widget.NewLabelWithStyle("Bottom", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	w.SetContent(fyne.NewContainerWithLayout(
+
+	scopeFrame := &aScopeFrame{window: window}
+
+	time.Sleep(500 * time.Millisecond)
+	FetchCurve(scope)
+	t1 := 0.0
+	t2 := 1.0e-3
+	if data != nil {
+		t1 = data[0][0]
+		t2 = data[0][len(data[0])-1]
+	}
+	Grid(scopeImg, t1, t2, data[len(data)-2], data[len(data)-1])
+	plot(scopeImg, data)
+
+	//update(evRefresh, scopeFrame)
+	scopeFrame.canvas = canvas.NewImageFromImage(scopeImg)
+
+	window.SetContent(fyne.NewContainerWithLayout(
 		layout.NewBorderLayout(
 			top,
-			btm,
+			nil,
 			nil,
 			nil),
-		top, btm, fyneImg),
-	)
+		top, fyneImg))
+
 	//w.Maximize()
-	w.Resize(fyne.Size{1000, 750})
-	w.CenterOnScreen()
-	go handleEvents(w)
-	go getCurve(scope)
-	refresh()
-	w.ShowAndRun()
+	window.Resize(fyne.Size{1000, 750})
+	window.CenterOnScreen()
+	//go handleEvents(window, scopeFrame)
+	//go getCurve(scope)
+	window.ShowAndRun()
 }
