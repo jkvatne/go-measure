@@ -7,21 +7,16 @@ import (
 	"image/draw"
 	"time"
 
-	"github.com/jkvatne/go-measure/tps2000"
-
-	"fyne.io/fyne/layout"
-	"fyne.io/fyne/widget"
-
-	"github.com/jkvatne/go-measure/ad2"
-
-	"github.com/jkvatne/go-measure/instr"
-
-	"github.com/jkvatne/go-measure/alog"
-
 	"fyne.io/fyne"
 	"fyne.io/fyne/app"
 	"fyne.io/fyne/canvas"
+	"fyne.io/fyne/layout"
+	"fyne.io/fyne/widget"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/jkvatne/go-measure/ad2"
+	"github.com/jkvatne/go-measure/alog"
+	"github.com/jkvatne/go-measure/instr"
+	"github.com/jkvatne/go-measure/tps2000"
 	"golang.org/x/image/colornames"
 )
 
@@ -38,11 +33,28 @@ type aScopeFrame struct {
 
 const (
 	updateEvent event = iota
-	evRefresh
-	doneEevnt
+	evRedraw
+	evDone
 )
 
 var events chan event
+
+func handleEvents(f *aScopeFrame) {
+	time.Sleep(time.Second)
+	for {
+		select {
+		case e := <-events:
+			if e == evDone {
+				return
+			}
+			if e == evRedraw && len(events) == 0 {
+				f.redrawScope()
+				f.window.Canvas().Refresh(f.canvas)
+				time.Sleep(time.Millisecond * 100)
+			}
+		}
+	}
+}
 
 // FetchCurve will read points from scope
 func FetchCurve(scope instr.Scope) {
@@ -52,12 +64,6 @@ func FetchCurve(scope instr.Scope) {
 	if err != nil {
 		alog.Error("Error fetching curve, %s", err)
 	}
-}
-
-func getCurve(scope instr.Scope) {
-	time.Sleep(500 * time.Millisecond)
-	FetchCurve(scope)
-	events <- evRefresh
 }
 
 // SetupAd2 will initialize Digilent Analog Discovery 2
@@ -76,8 +82,10 @@ func SetupAd2(a *ad2.Ad2, freq float64) error {
 }
 
 func (f *aScopeFrame) Layout(objects []fyne.CanvasObject, size fyne.Size) {
-	f.canvas.Resize(size)
-	f.redrawScope()
+	if size.Width != f.canvas.Size().Width || size.Height != f.canvas.Size().Height {
+		f.canvas.Resize(size)
+		events <- evRedraw
+	}
 }
 
 func (f *aScopeFrame) MinSize(objects []fyne.CanvasObject) fyne.Size {
@@ -91,6 +99,7 @@ func (f *aScopeFrame) redrawScope() {
 	scopeImg = image.NewRGBA(image.Rect(0, 0, f.canvas.Size().Width, f.canvas.Size().Height))
 	plot(scopeImg, data)
 	Label(scopeImg, 100, 100, fmt.Sprintf("n=%d", n), colornames.Orange, Regular10)
+
 }
 
 var useName string
@@ -102,7 +111,7 @@ func main() {
 	window := a.NewWindow("Scope")
 	window.SetPadded(false)
 
-	events = make(chan event)
+	events = make(chan event, 10)
 
 	var scope instr.Scope
 	var digilentAd2 *ad2.Ad2
@@ -138,6 +147,6 @@ func main() {
 	window.CenterOnScreen()
 	// Maximize to fill all of screen
 	window.Maximize()
-	//go handleEvents(window, scopeFrame)
+	go handleEvents(scopeFrame)
 	window.ShowAndRun()
 }
