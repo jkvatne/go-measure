@@ -1,10 +1,13 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"image/draw"
 	"time"
+
+	"github.com/jkvatne/go-measure/tps2000"
 
 	"fyne.io/fyne/layout"
 	"fyne.io/fyne/widget"
@@ -69,14 +72,12 @@ func SetupAd2(a *ad2.Ad2, freq float64) error {
 	err = a.SetupTrigger(instr.Ch1, instr.DC, instr.Rising, 0.0, false, 0.0)
 	sampleInterval := 1.0 / 2500.0 / freq
 	err = a.SetupTime(sampleInterval, 0.0, instr.Sample)
-
 	return err
 }
 
 func (f *aScopeFrame) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	f.canvas.Resize(size)
 	f.redrawScope()
-	f.window.Canvas().Refresh(f.canvas)
 }
 
 func (f *aScopeFrame) MinSize(objects []fyne.CanvasObject) fyne.Size {
@@ -88,34 +89,34 @@ var n int
 func (f *aScopeFrame) redrawScope() {
 	n++
 	scopeImg = image.NewRGBA(image.Rect(0, 0, f.canvas.Size().Width, f.canvas.Size().Height))
-	t1 := 0.0
-	t2 := 1.0e-3
-	if data != nil {
-		t1 = data[0][0]
-		t2 = data[0][len(data[0])-1]
-	}
-	Grid(scopeImg, t1, t2, data[len(data)-2], data[len(data)-1])
 	plot(scopeImg, data)
 	Label(scopeImg, 100, 100, fmt.Sprintf("n=%d", n), colornames.Orange, Regular10)
-	//f.canvas = canvas.NewRasterFromImage(img)
-	//scopeFrame := &aScopeFrame{window: window}
-	//scopeFrame.canvas = canvas.NewRasterFromImage(scopeImg)
-	//window.SetContent(fyne.NewContainerWithLayout(scopeFrame, scopeFrame.canvas))
-	//scopeFrame.canvas = canvas.NewRasterFromImage(scopeImg)
 }
 
+var useName string
+
 func main() {
+	flag.StringVar(&useName, "use", "ad2", "Use ad2 or tps2000 as digitizer")
+
 	a := app.NewWithID("io.fyne.demo")
 	window := a.NewWindow("Scope")
 	window.SetPadded(false)
 
 	events = make(chan event)
-	//scope, err := tps2000.New("")
-	scope, err := ad2.New("")
-	if err != nil {
-		alog.Error("No scope found")
+
+	var scope instr.Scope
+	var digilentAd2 *ad2.Ad2
+	var err error
+	if useName == "tps2000" {
+		scope, err = tps2000.New("")
+	} else {
+		digilentAd2, err = ad2.New("")
+		err = SetupAd2(digilentAd2, 1000)
+		scope = instr.Scope(digilentAd2)
 	}
-	err = SetupAd2(scope, 1000)
+	if err != nil {
+		alog.Error("No %s scope found", useName)
+	}
 	if err != nil {
 		alog.Error("Error setting up AD2")
 	}
@@ -123,32 +124,20 @@ func main() {
 	m := glfw.GetMonitors()[0].GetVideoMode()
 	fmt.Printf("Monitor W=%d, H=%d\n", m.Width, m.Height)
 
-	b := image.Rect(0, 0, 640, 480)
-	scopeImg = image.NewRGBA(b)
-	draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Red), image.Pt(0, 0), draw.Src)
-	//fyneImg = canvas.NewImageFromImage(scopeImg)
-
-	time.Sleep(500 * time.Millisecond)
+	scopeImg = image.NewRGBA(image.Rect(0, 0, 640, 480))
+	draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
+	time.Sleep(300 * time.Millisecond)
 	FetchCurve(scope)
-	t1 := 0.0
-	t2 := 1.0e-3
-	if data != nil {
-		t1 = data[0][0]
-		t2 = data[0][len(data[0])-1]
-	}
-	Grid(scopeImg, t1, t2, data[len(data)-2], data[len(data)-1])
-	plot(scopeImg, data)
-	Label(scopeImg, 100, 100, fmt.Sprintf("Initial"), colornames.Orange, Regular12)
 	scopeFrame = &aScopeFrame{window: window}
 	scopeFrame.canvas = canvas.NewRaster(func(w, h int) image.Image { return scopeImg })
 	// Top header label
 	top := widget.NewLabelWithStyle("Oscilloscope", fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
 	// Setup form contents
 	window.SetContent(fyne.NewContainerWithLayout(layout.NewBorderLayout(top, nil, nil, nil), top, fyne.NewContainerWithLayout(scopeFrame, scopeFrame.canvas)))
-	//window.SetContent(fyne.NewContainerWithLayout(scopeFrame, scopeFrame.canvas))
-	window.Maximize()
+	// Center On screen only needed if not maximized
 	window.CenterOnScreen()
+	// Maximize to fill all of screen
+	window.Maximize()
 	//go handleEvents(window, scopeFrame)
-	//go getCurve(scope)
 	window.ShowAndRun()
 }

@@ -10,7 +10,7 @@ import (
 	"golang.org/x/image/colornames"
 )
 
-var ChanColor = []color.Color{
+var chanColor = []color.Color{
 	colornames.Yellow,
 	colornames.Cyan,
 	colornames.Magenta,
@@ -21,50 +21,6 @@ var ChanColor = []color.Color{
 	colornames.Beige,
 }
 
-// Grid will draw a oscilloscope grid with labels.
-func Grid(img draw.Image, t1, t2 float64, voltTop, voltBtm []float64) {
-	// Fill black background
-	draw.Draw(img, img.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
-	// The four corners of the grid
-	tl := img.Bounds().Min.Add(image.Pt(30, 10))
-	br := img.Bounds().Max.Add(image.Pt(-20, -20))
-	bl := image.Pt(tl.X, br.Y)
-	tr := image.Pt(br.X, tl.Y)
-	// Voltage labels
-	for i := 0; i < len(voltTop); i++ {
-		t := tl.Add(image.Pt(0, i*12))
-		b := bl.Add(image.Pt(0, i*12))
-		vNum(img, t, b, voltTop[i], voltBtm[i], ChanColor[i])
-	}
-	// Time labels
-	hNum(img, bl, br, t1, t2)
-	// Frame around grid
-	Rect(img, tl, br, colornames.Gray, 1)
-	// Vertical ticks
-	vTicks(img, tl, bl, 10, 16)
-	vTicks(img, tl, bl, 20, 8)
-	vTicks(img, tl, bl, 100, 4)
-	vTicks(img, tr, br, 10, -16)
-	vTicks(img, tr, br, 20, -8)
-	vTicks(img, tr, br, 100, -4)
-	// Horizontal ticks
-	hTicks(img, bl, br, 10, -16)
-	hTicks(img, bl, br, 20, -8)
-	hTicks(img, bl, br, 100, -4)
-	hTicks(img, tl, tr, 10, 16)
-	hTicks(img, tl, tr, 20, 8)
-	hTicks(img, tl, tr, 100, 4)
-	// grid lines horizontal
-	h := br.Y - tl.Y
-	for i := 0; i < 10; i++ {
-		hDot(img, tl.X, br.X, tl.Y+i*h/10, colornames.Gray)
-	}
-	// grid lines verticaln
-	w := br.X - tl.X
-	for i := 0; i < 10; i++ {
-		vDot(img, tl.X+i*w/10, tl.Y, br.Y, colornames.Gray)
-	}
-}
 func hDot(img draw.Image, x1, x2, y int, c color.Color) {
 	for x := x1; x < x2; x += 4 {
 		img.Set(x, y, c)
@@ -156,13 +112,52 @@ func hTicks(img draw.Image, p1, p2 image.Point, n, dy int) {
 }
 
 func plot(img *image.RGBA, data [][]float64) {
+	// Fill black background
+	draw.Draw(img, img.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
+	// Exit if no data - leave black screen
 	if data == nil {
 		return
 	}
+
 	tl := img.Bounds().Min.Add(image.Pt(30, 10))
 	br := img.Bounds().Max.Add(image.Pt(-20, -20))
 	bl := image.Pt(tl.X, br.Y)
 	tr := image.Pt(br.X, tl.Y)
+
+	// Voltage labels
+	for i := 0; i < len(data[len(data)-2]); i++ {
+		t := tl.Add(image.Pt(0, i*12))
+		b := bl.Add(image.Pt(0, i*12))
+		vNum(img, t, b, data[len(data)-2][i], data[len(data)-1][i], chanColor[i])
+	}
+	// Time labels
+	hNum(img, bl, br, data[0][0], data[0][len(data[0])-1])
+	// Vertical ticks
+	vTicks(img, tl, bl, 10, 16)
+	vTicks(img, tl, bl, 20, 8)
+	vTicks(img, tl, bl, 100, 4)
+	vTicks(img, tr, br, 10, -16)
+	vTicks(img, tr, br, 20, -8)
+	vTicks(img, tr, br, 100, -4)
+	// Horizontal ticks
+	hTicks(img, bl, br, 10, -16)
+	hTicks(img, bl, br, 20, -8)
+	hTicks(img, bl, br, 100, -4)
+	hTicks(img, tl, tr, 10, 16)
+	hTicks(img, tl, tr, 20, 8)
+	hTicks(img, tl, tr, 100, 4)
+	// Frame around grid
+	Rect(img, tl, br, colornames.Gray, 1)
+	// grid lines horizontal
+	h := br.Y - tl.Y
+	for i := 0; i < 10; i++ {
+		hDot(img, tl.X, br.X, tl.Y+i*h/10, colornames.Gray)
+	}
+	// grid lines verticaln
+	w := br.X - tl.X
+	for i := 0; i < 10; i++ {
+		vDot(img, tl.X+i*w/10, tl.Y, br.Y, colornames.Gray)
+	}
 	chanNum := len(data) - 1
 	// Check that y range is present
 	scalingPresent := len(data[0]) >= 4 && len(data[len(data)-1]) <= 16 && len(data[len(data)-2]) <= 16
@@ -170,14 +165,10 @@ func plot(img *image.RGBA, data [][]float64) {
 		chanNum = chanNum - 2
 	}
 	for ch := 0; ch < len(data[len(data)-2]); ch++ {
-		col := ChanColor[ch]
-		voltTop := +10.0
-		voltBtm := -10.0
-		if scalingPresent {
-			voltTop = data[len(data)-2][ch]
-			voltBtm = data[len(data)-1][ch]
-		}
-		y0 := tl.Y + int(float64(bl.Y-tl.Y)*data[1][0]/10.0)
+		col := chanColor[ch]
+		voltTop := data[len(data)-2][ch]
+		voltBtm := data[len(data)-1][ch]
+		y0 := bl.Y + int(float64(tl.Y-bl.Y)*(data[ch+1][0]-voltBtm)/(voltTop-voltBtm))
 		x0 := tl.X + int(float64(tr.X-tl.X)*data[0][0]/data[0][len(data[0])-1])
 		for i := 0; i < len(data[0]); i++ {
 			y1 := bl.Y + int(float64(tl.Y-bl.Y)*(data[ch+1][i]-voltBtm)/(voltTop-voltBtm))
