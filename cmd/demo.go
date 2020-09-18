@@ -6,6 +6,9 @@ import (
 	"image/draw"
 	"time"
 
+	"fyne.io/fyne/layout"
+	"fyne.io/fyne/widget"
+
 	"github.com/jkvatne/go-measure/ad2"
 
 	"github.com/jkvatne/go-measure/instr"
@@ -19,8 +22,9 @@ import (
 	"golang.org/x/image/colornames"
 )
 
-var scopeImg *image.RGBA
 var data [][]float64
+var scopeFrame *aScopeFrame
+var scopeImg *image.RGBA
 
 type event int
 
@@ -36,39 +40,6 @@ const (
 )
 
 var events chan event
-
-func handleEvents(w fyne.Window, f *aScopeFrame) {
-	time.Sleep(time.Second)
-	for {
-		select {
-		case e := <-events:
-			if e == doneEevnt {
-				return
-			}
-			update(e, f)
-		}
-	}
-}
-
-func update(e event, f *aScopeFrame) {
-	time.Sleep(time.Millisecond * 500)
-	size := f.canvas.Size()
-	//size := f.canvas.Size()
-	if e == evRefresh {
-		scopeImg = image.NewRGBA(image.Rect(0, 0, size.Width, size.Height))
-		draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Blue), image.Pt(0, 0), draw.Src)
-	}
-	t1 := 0.0
-	t2 := 1.0e-3
-	if data != nil {
-		t1 = data[0][0]
-		t2 = data[0][len(data[0])-1]
-	}
-	Grid(scopeImg, t1, t2, data[len(data)-2], data[len(data)-1])
-	plot(scopeImg, data)
-	f.canvas = canvas.NewRasterFromImage(scopeImg)
-	//f.refresh()
-}
 
 // FetchCurve will read points from scope
 func FetchCurve(scope instr.Scope) {
@@ -105,15 +76,11 @@ func SetupAd2(a *ad2.Ad2, freq float64) error {
 func (f *aScopeFrame) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	f.canvas.Resize(size)
 	f.redrawScope()
-	f.refresh()
+	f.window.Canvas().Refresh(f.canvas)
 }
 
 func (f *aScopeFrame) MinSize(objects []fyne.CanvasObject) fyne.Size {
-	return fyne.NewSize(1000, 700)
-}
-
-func (f *aScopeFrame) refresh() {
-	f.window.Canvas().Refresh(f.canvas)
+	return fyne.NewSize(640, 480)
 }
 
 var n int
@@ -130,7 +97,11 @@ func (f *aScopeFrame) redrawScope() {
 	Grid(scopeImg, t1, t2, data[len(data)-2], data[len(data)-1])
 	plot(scopeImg, data)
 	Label(scopeImg, 100, 100, fmt.Sprintf("n=%d", n), colornames.Orange, Regular10)
-	f.canvas = canvas.NewRasterFromImage(scopeImg)
+	//f.canvas = canvas.NewRasterFromImage(img)
+	//scopeFrame := &aScopeFrame{window: window}
+	//scopeFrame.canvas = canvas.NewRasterFromImage(scopeImg)
+	//window.SetContent(fyne.NewContainerWithLayout(scopeFrame, scopeFrame.canvas))
+	//scopeFrame.canvas = canvas.NewRasterFromImage(scopeImg)
 }
 
 func main() {
@@ -152,7 +123,7 @@ func main() {
 	m := glfw.GetMonitors()[0].GetVideoMode()
 	fmt.Printf("Monitor W=%d, H=%d\n", m.Width, m.Height)
 
-	b := image.Rect(0, 0, 1000, 700)
+	b := image.Rect(0, 0, 640, 480)
 	scopeImg = image.NewRGBA(b)
 	draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Red), image.Pt(0, 0), draw.Src)
 	//fyneImg = canvas.NewImageFromImage(scopeImg)
@@ -168,16 +139,14 @@ func main() {
 	Grid(scopeImg, t1, t2, data[len(data)-2], data[len(data)-1])
 	plot(scopeImg, data)
 	Label(scopeImg, 100, 100, fmt.Sprintf("Initial"), colornames.Orange, Regular12)
-	scopeFrame := &aScopeFrame{window: window}
-	scopeFrame.canvas = canvas.NewRasterFromImage(scopeImg)
+	scopeFrame = &aScopeFrame{window: window}
+	scopeFrame.canvas = canvas.NewRaster(func(w, h int) image.Image { return scopeImg })
 	// Top header label
-	//top := widget.NewLabelWithStyle("Oscilloscope", fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
+	top := widget.NewLabelWithStyle("Oscilloscope", fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
 	// Setup form contents
-	//window.SetContent(fyne.NewContainerWithLayout(layout.NewBorderLayout(	top,nil,nil,nil),top, fyne.NewContainerWithLayout(scopeFrame, scopeFrame.canvas)))
-	window.SetContent(fyne.NewContainerWithLayout(scopeFrame, scopeFrame.canvas))
-
-	//w.Maximize()
-	window.Resize(fyne.Size{1000, 750})
+	window.SetContent(fyne.NewContainerWithLayout(layout.NewBorderLayout(top, nil, nil, nil), top, fyne.NewContainerWithLayout(scopeFrame, scopeFrame.canvas)))
+	//window.SetContent(fyne.NewContainerWithLayout(scopeFrame, scopeFrame.canvas))
+	window.Maximize()
 	window.CenterOnScreen()
 	//go handleEvents(window, scopeFrame)
 	//go getCurve(scope)

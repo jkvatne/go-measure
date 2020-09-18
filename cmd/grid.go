@@ -24,7 +24,7 @@ var ChanColor = []color.Color{
 // Grid will draw a oscilloscope grid with labels.
 func Grid(img draw.Image, t1, t2 float64, voltTop, voltBtm []float64) {
 	// Fill black background
-	draw.Draw(scopeImg, scopeImg.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
+	draw.Draw(img, img.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
 	// The four corners of the grid
 	tl := img.Bounds().Min.Add(image.Pt(30, 10))
 	br := img.Bounds().Max.Add(image.Pt(-20, -20))
@@ -34,12 +34,12 @@ func Grid(img draw.Image, t1, t2 float64, voltTop, voltBtm []float64) {
 	for i := 0; i < len(voltTop); i++ {
 		t := tl.Add(image.Pt(0, i*12))
 		b := bl.Add(image.Pt(0, i*12))
-		vNum(scopeImg, t, b, voltTop[i], voltBtm[i], ChanColor[i])
+		vNum(img, t, b, voltTop[i], voltBtm[i], ChanColor[i])
 	}
 	// Time labels
-	hNum(scopeImg, bl, br, t1, t2)
+	hNum(img, bl, br, t1, t2)
 	// Frame around grid
-	Rect(scopeImg, tl, br, colornames.Gray, 1)
+	Rect(img, tl, br, colornames.Gray, 1)
 	// Vertical ticks
 	vTicks(img, tl, bl, 10, 16)
 	vTicks(img, tl, bl, 20, 8)
