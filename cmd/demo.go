@@ -40,10 +40,19 @@ func handleEvents(f *plot.Frame, window fyne.Window) {
 				return
 			}
 			if e == evRedraw || e == evFetchData {
-				f.Redraw(window)
+				f.Refresh()
 			}
 		}
 	}
+}
+
+func startPolling() {
+	go func() {
+		for {
+			time.Sleep(time.Second)
+			events <- evRedraw
+		}
+	}()
 }
 
 // FetchCurve will read points from scope
@@ -70,17 +79,13 @@ func SetupAd2(a *ad2.Ad2, freq float64) error {
 	return err
 }
 
-var useName string
-
 func main() {
+	var useName string
 	flag.StringVar(&useName, "use", "ad2", "Use ad2 or tps2000 as digitizer")
-
 	a := app.NewWithID("io.fyne.demo")
 	window := a.NewWindow("Scope")
 	window.SetPadded(false)
-
 	events = make(chan event, 10)
-
 	var scope instr.Scope
 	var digilentAd2 *ad2.Ad2
 	var err error
@@ -98,7 +103,7 @@ func main() {
 		scope = instr.Scope(digilentAd2)
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	data := FetchCurve(scope)
 
 	m := glfw.GetMonitors()[0].GetVideoMode()
@@ -108,7 +113,7 @@ func main() {
 	top := widget.NewLabelWithStyle("Oscilloscope", fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
 	// Setup form contents
 	f := plot.NewFrame()
-	window.SetContent(fyne.NewContainerWithLayout(layout.NewBorderLayout(top, nil, nil, nil), top, fyne.NewContainerWithLayout(f, f.Canvas)))
+	window.SetContent(fyne.NewContainerWithLayout(layout.NewBorderLayout(top, nil, nil, nil), top, f))
 	// Center On screen only needed if not maximized
 	window.CenterOnScreen()
 	// Maximize to fill all of screen
@@ -116,5 +121,6 @@ func main() {
 	f.SetData(data)
 	go handleEvents(f, window)
 	events <- evFetchData
+	startPolling()
 	window.ShowAndRun()
 }

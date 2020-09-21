@@ -111,7 +111,7 @@ func hTicks(img draw.Image, p1, p2 image.Point, n, dy int) {
 	}
 }
 
-func plot(img *image.RGBA, data [][]float64) {
+func plot(img draw.Image, data [][]float64) {
 	// Fill black background
 	draw.Draw(img, img.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
 	// Exit if no data - leave black screen

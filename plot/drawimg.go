@@ -6,7 +6,6 @@ import (
 	"image/draw"
 
 	"github.com/goki/freetype/truetype"
-
 	"golang.org/x/image/font/gofont/goregular"
 
 	"golang.org/x/image/font"
@@ -107,7 +106,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	Regular10 = truetype.NewFace(f, &truetype.Options{Size: 10, DPI: 72})
+	Regular10 = truetype.NewFace(f, &truetype.Options{Size: 10, DPI: 96})
 	h10 = int(Regular10.Metrics().Ascent / 64)
-	Regular12 = truetype.NewFace(f, &truetype.Options{Size: 12, DPI: 72})
+	Regular12 = truetype.NewFace(f, &truetype.Options{Size: 12, DPI: 96})
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jkvatne/go-measure/alog"
 	"github.com/jkvatne/go-measure/instr"
 )
 
@@ -93,7 +94,7 @@ func Enumerate() {
 		if open == 1 {
 			DeviceInfo[i].Unavailable = true
 		}
-		fmt.Printf("Found %s, %s\n", DeviceInfo[i].Name, DeviceInfo[i].SerialNumber)
+		alog.Info("Found %s, %s\n", DeviceInfo[i].Name, DeviceInfo[i].SerialNumber)
 	}
 }
 
@@ -345,7 +346,7 @@ func (a *Ad2) Curve(channels []instr.Chan, samples int) (data [][]float64, err e
 			break
 		}
 	}
-	fmt.Printf("Used %dmS", time.Since(tStart)/1000000)
+	alog.Info("Collecting data for %dmS", time.Since(tStart)/1000000)
 	var timeData []float64
 	for i := 0; i < samples; i++ {
 		timeData = append(timeData, float64(i)*a.sampleIntervalSec)
