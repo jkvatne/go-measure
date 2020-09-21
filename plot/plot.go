@@ -42,7 +42,7 @@ func (r *frameRender) doPlot() {
 		draw.Draw(img, img.Bounds(), image.NewUniform(colornames.Cyan), image.Pt(0, 0), draw.Src)
 		plot(img, r.frame.Data)
 		r.n++
-		Label(img, 100, 100, fmt.Sprintf("n=%d", r.n), colornames.Orange, Regular12)
+		Label(img, 35, h10+2, fmt.Sprintf("n=%d", r.n), colornames.Orange, Regular12)
 	}
 }
 

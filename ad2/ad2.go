@@ -302,10 +302,17 @@ func (a *Ad2) SetupTime(sampleIntervalSec float64, xPosSec float64, mode instr.S
 
 // SetupTrigger will set trigger conditions
 func (a *Ad2) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, slope instr.Slope, trigLevel float64, auto bool, xPos float64) error {
-	if sourceChan <= instr.Ch2 && sourceChan >= instr.Ch1 {
+	if sourceChan >= instr.Ch1 && sourceChan <= instr.Ch2 {
 		C.FDwfAnalogInTriggerSourceSet(a.hdwf, C.trigsrcDetectorAnalogIn)
+		hyst := C.double(a.Range[sourceChan-instr.Ch1] / 300)
+		if coupling == instr.NoiseReject {
+			hyst = C.double(a.Range[sourceChan-instr.Ch1] / 20)
+		}
+		C.FDwfAnalogInTriggerHysteresisSet(a.hdwf, hyst)
+		C.FDwfAnalogInTriggerLevelSet(a.hdwf, C.double(-trigLevel)-hyst)
 	} else if sourceChan == instr.EXT {
 		C.FDwfAnalogInTriggerSourceSet(a.hdwf, C.trigsrcExternal1)
+		C.FDwfAnalogInTriggerLevelSet(a.hdwf, C.double(-trigLevel))
 	}
 	C.FDwfAnalogInTriggerTypeSet(a.hdwf, C.trigtypeEdge)
 	if slope == instr.Rising {
@@ -314,8 +321,9 @@ func (a *Ad2) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, slope
 		C.FDwfAnalogInTriggerConditionSet(a.hdwf, C.DwfTriggerSlopeFall)
 	} else if slope == instr.Either {
 		C.FDwfAnalogInTriggerConditionSet(a.hdwf, C.DwfTriggerSlopeEither)
+	} else {
+		return fmt.Errorf("Invalid trigger slope")
 	}
-	C.FDwfAnalogInTriggerLevelSet(a.hdwf, C.double(trigLevel))
 	if auto {
 		// In auto mode, trigger after 20mS timeout
 		C.FDwfAnalogInTriggerAutoTimeoutSet(a.hdwf, 0.02)
@@ -346,7 +354,6 @@ func (a *Ad2) Curve(channels []instr.Chan, samples int) (data [][]float64, err e
 			break
 		}
 	}
-	alog.Info("Collecting data for %dmS", time.Since(tStart)/1000000)
 	var timeData []float64
 	for i := 0; i < samples; i++ {
 		timeData = append(timeData, float64(i)*a.sampleIntervalSec)

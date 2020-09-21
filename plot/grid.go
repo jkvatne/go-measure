@@ -77,7 +77,8 @@ func hNum(img draw.Image, p1, p2 image.Point, t1, t2 float64) {
 		x := p1.X + i*w/10
 		val := t1 + float64(i)*(t2-t1)/10
 		s := fmt.Sprintf("%0.*f", dp, val) + unit
-		Label(img, x-8, p1.Y+10, s, colornames.White, Regular10)
+		y := p1.Y + int(Regular10.Metrics().Ascent/54) // Divide by 58 instead of 64 to get some padding
+		Label(img, x-8, y, s, colornames.White, Regular10)
 	}
 }
 
@@ -112,22 +113,26 @@ func hTicks(img draw.Image, p1, p2 image.Point, n, dy int) {
 }
 
 func plot(img draw.Image, data [][]float64) {
+	topMargin := h10 + 4
+	leftMargin := 45
+	rightMargin := 20
 	// Fill black background
 	draw.Draw(img, img.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
 	// Exit if no data - leave black screen
 	if data == nil {
+		Label(img, 35, h10+2, "No data", colornames.White, Regular10)
 		return
 	}
 
-	tl := img.Bounds().Min.Add(image.Pt(30, 10))
-	br := img.Bounds().Max.Add(image.Pt(-20, -20))
+	tl := img.Bounds().Min.Add(image.Pt(leftMargin, topMargin))
+	br := img.Bounds().Max.Add(image.Pt(-rightMargin, -topMargin))
 	bl := image.Pt(tl.X, br.Y)
 	tr := image.Pt(br.X, tl.Y)
 
 	// Voltage labels
 	for i := 0; i < len(data[len(data)-2]); i++ {
-		t := tl.Add(image.Pt(0, i*12))
-		b := bl.Add(image.Pt(0, i*12))
+		t := tl.Add(image.Pt(0, i*h10))
+		b := bl.Add(image.Pt(0, i*h10))
 		vNum(img, t, b, data[len(data)-2][i], data[len(data)-1][i], chanColor[i])
 	}
 	// Time labels

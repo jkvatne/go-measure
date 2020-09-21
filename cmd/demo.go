@@ -28,13 +28,13 @@ const (
 
 var events chan event
 
-func handleEvents(f *plot.Frame, window fyne.Window) {
+func handleEvents(f *plot.Frame, scope instr.Scope) {
 	time.Sleep(time.Second)
 	for {
 		select {
 		case e := <-events:
 			if e == evFetchData {
-
+				f.SetData(FetchCurve(scope))
 			}
 			if e == evDone {
 				return
@@ -50,7 +50,7 @@ func startPolling() {
 	go func() {
 		for {
 			time.Sleep(time.Second)
-			events <- evRedraw
+			events <- evFetchData
 		}
 	}()
 }
@@ -71,11 +71,11 @@ func SetupAd2(a *ad2.Ad2, freq float64) error {
 	err = a.SetAnalogOut(instr.Ch1, freq, 0.0, ad2.WfSine, 2.0, 0)
 	err = a.SetAnalogOut(instr.Ch2, freq, 90.0, ad2.WfSine, 2.0, 0)
 	a.StartAnalogOut(instr.TRIG)
-	err = a.SetupChannel(instr.Ch1, 10.0, 1.0, instr.DC)
-	err = a.SetupChannel(instr.Ch2, 10.0, -1.0, instr.DC)
-	err = a.SetupTrigger(instr.Ch1, instr.DC, instr.Rising, 0.0, false, 0.0)
+	err = a.SetupChannel(instr.Ch1, 10.0, 0.0, instr.DC)
+	err = a.SetupChannel(instr.Ch2, 10.0, 0.0, instr.DC)
+	err = a.SetupTrigger(instr.Ch2, instr.DC, instr.Rising, 1.0, false, 0.0)
 	sampleInterval := 1.0 / 2500.0 / freq
-	err = a.SetupTime(sampleInterval, 0.0, instr.Sample)
+	err = a.SetupTime(sampleInterval, 0.0, instr.Average)
 	return err
 }
 
@@ -104,7 +104,6 @@ func main() {
 	}
 
 	time.Sleep(100 * time.Millisecond)
-	data := FetchCurve(scope)
 
 	m := glfw.GetMonitors()[0].GetVideoMode()
 	alog.Info("Monitor W=%d, H=%d\n", m.Width, m.Height)
@@ -118,8 +117,7 @@ func main() {
 	window.CenterOnScreen()
 	// Maximize to fill all of screen
 	window.Maximize()
-	f.SetData(data)
-	go handleEvents(f, window)
+	go handleEvents(f, scope)
 	events <- evFetchData
 	startPolling()
 	window.ShowAndRun()
