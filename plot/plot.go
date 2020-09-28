@@ -1,3 +1,5 @@
+// Copyright 2020 Jan Kåre Vatne. All rights reserved.
+
 package plot
 
 import (
@@ -5,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"sync"
 
 	"github.com/goki/freetype/truetype"
 	"golang.org/x/image/font/gofont/goregular"
@@ -19,10 +22,11 @@ import (
 // Frame is a scope display in a frame
 type Frame struct {
 	widget.BaseWidget
-	ScopeImg *image.RGBA
-	face     font.Face
-	Data     [][]float64
-	n        int
+	ScopeImg  *image.RGBA
+	face      font.Face
+	Data      [][]float64
+	DataMutex sync.Mutex
+	n         int
 }
 
 type frameRender struct {
@@ -38,19 +42,22 @@ func (r *frameRender) MinSize() fyne.Size {
 }
 
 func (r *frameRender) doPlot() {
-	if img, ok := r.scope.Image.(draw.Image); ok {
-		draw.Draw(img, img.Bounds(), image.NewUniform(colornames.Cyan), image.Pt(0, 0), draw.Src)
-		plot(img, r.frame.Data)
-		r.n++
-		Label(img, 35, h10+2, fmt.Sprintf("n=%d", r.n), colornames.Orange, Regular12)
-	}
+	r.frame.DataMutex.Lock()
+	img := image.NewRGBA(r.scope.Image.Bounds())
+	draw.Draw(img, img.Bounds(), image.NewUniform(colornames.Cyan), image.Pt(0, 0), draw.Src)
+	plot(img, r.frame.Data)
+	r.n++
+	Label(img, 70, h10+2, fmt.Sprintf("n=%d", r.n), colornames.White, Regular10)
+	r.scope.Image = img
+	r.frame.DataMutex.Unlock()
 }
 
 // Layout resizes image
 func (r *frameRender) Layout(size fyne.Size) {
+	//	r.scope.Image = image.NewRGBA(image.Rect(0, 0, size.Width, size.Height))
 	r.scope.Image = image.NewRGBA(image.Rect(0, 0, size.Width, size.Height))
-	r.doPlot()
 	r.scope.Resize(size)
+	r.doPlot()
 }
 
 // ApplyTheme is not used
@@ -64,7 +71,7 @@ func (r *frameRender) BackgroundColor() color.Color {
 
 // Refresh do refresh
 func (r *frameRender) Refresh() {
-	r.doPlot()
+	//r.doPlot()
 	canvas.Refresh(r.frame)
 }
 
@@ -82,16 +89,12 @@ func (f *Frame) MinSize() fyne.Size {
 	return fyne.NewSize(640, 480)
 }
 
-// SetData will update the plot source data
-func (f *Frame) SetData(data [][]float64) {
-	f.Data = data
-}
-
 // CreateRenderer gets the widget renderer for this table - internal use only
 func (f *Frame) CreateRenderer() fyne.WidgetRenderer {
 	r := &frameRender{}
 	r.frame = f
 	r.scope = &canvas.Image{}
+	r.scope.Image = image.NewRGBA(image.Rect(0, 0, 640, 480))
 	r.objects = []fyne.CanvasObject{r.scope}
 	r.Refresh()
 	return r

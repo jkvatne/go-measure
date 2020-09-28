@@ -16,7 +16,7 @@ import (
 	"github.com/jkvatne/serial"
 )
 
-// Chan is used for channel numbers
+// Chan is used for channel numbers. Note that Channel 1 is number 1 (the Ch1 constant).
 type Chan int
 
 // Channel constants
@@ -107,7 +107,7 @@ func (i *Connection) Write(s string, args ...interface{}) error {
 	return nil
 }
 
-// ReadByte will return an array of bytes
+// ReadByte will return a single byte
 func (i *Connection) ReadByte() byte {
 	b := make([]byte, 1)
 	_, _ = i.conn.Read(b)
@@ -270,4 +270,71 @@ func (i *Connection) QueryIdn() (string, error) {
 	}
 	i.Name = name
 	return name, nil
+}
+
+// TimeToStr will return a string with sec/ms/uS/nS units
+func TimeToStr(t float64) string {
+	unit := "s"
+	if t < 1e-6 {
+		unit = "nS"
+		t = t * 1e9
+	} else if t < 1e-3 {
+		unit = "uS"
+		t = t * 1e6
+	} else if t < 1.0 {
+		unit = "mS"
+		t = t * 1e3
+	} else if t < 60.0 {
+		unit = "S"
+		t = t
+	} else if t < 3600.0 {
+		t = t / 60.0
+		unit = "mn"
+	} else if t < 86400.0 {
+		t = t / 3600.0
+		unit = "hr"
+	}
+
+	dp := 0
+	if t >= 100.0 {
+		dp = 0
+	} else if t >= 10.0 {
+		dp = 1
+	} else if t >= 1.0 {
+		dp = 2
+	} else {
+		dp = 3
+	}
+	return fmt.Sprintf("%0.*f%s", dp, t, unit)
+}
+
+// VoltToStr will return a voltage with V/mV/uV units
+func VoltToStr(v float64) string {
+	unit := "V"
+	if v < 1e-6 {
+		unit = "nV"
+		v = v * 1e9
+	} else if v < 1e-3 {
+		unit = "uV"
+		v = v * 1e6
+	} else if v < 1.0 {
+		unit = "mV"
+		v = v * 1e3
+	} else if v < 1000.0 {
+		unit = "V"
+	} else {
+		v = v / 1e3
+		unit = "kV"
+	}
+	dp := 0
+	if v >= 100.0 {
+		dp = 0
+	} else if v >= 10.0 {
+		dp = 1
+	} else if v >= 1.0 {
+		dp = 2
+	} else {
+		dp = 3
+	}
+	return fmt.Sprintf("%0.*f%s", dp, v, unit)
 }

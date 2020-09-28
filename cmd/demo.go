@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"log"
+	"os"
 	"time"
 
 	"github.com/jkvatne/go-measure/plot"
@@ -34,7 +36,10 @@ func handleEvents(f *plot.Frame, scope instr.Scope) {
 		select {
 		case e := <-events:
 			if e == evFetchData {
-				f.SetData(FetchCurve(scope))
+				data, _ := scope.GetSamples()
+				f.DataMutex.Lock()
+				f.Data = data
+				f.DataMutex.Unlock()
 			}
 			if e == evDone {
 				return
@@ -49,19 +54,10 @@ func handleEvents(f *plot.Frame, scope instr.Scope) {
 func startPolling() {
 	go func() {
 		for {
-			time.Sleep(time.Second)
+			time.Sleep(3 * time.Second)
 			events <- evFetchData
 		}
 	}()
-}
-
-// FetchCurve will read points from scope
-func FetchCurve(scope instr.Scope) [][]float64 {
-	data, err := scope.Curve([]instr.Chan{instr.Ch1, instr.Ch2}, 2500)
-	if err != nil {
-		alog.Error("Error fetching curve, %s", err)
-	}
-	return data
 }
 
 // SetupAd2 will initialize Digilent Analog Discovery 2
@@ -75,13 +71,19 @@ func SetupAd2(a *ad2.Ad2, freq float64) error {
 	err = a.SetupChannel(instr.Ch2, 10.0, 0.0, instr.DC)
 	err = a.SetupTrigger(instr.Ch2, instr.DC, instr.Rising, 1.0, false, 0.0)
 	sampleInterval := 1.0 / 2500.0 / freq
-	err = a.SetupTime(sampleInterval, 0.0, instr.Average)
+	err = a.SetupTime(sampleInterval, 0.0, instr.Average, 2500)
 	return err
 }
 
-func main() {
-	var useName string
+var useName string
+
+func init() {
 	flag.StringVar(&useName, "use", "ad2", "Use ad2 or tps2000 as digitizer")
+}
+
+func main() {
+	flag.Parse()
+	alog.Setup(os.Stdout, alog.InfoLevel, log.Ltime|log.Ldate|log.Lmicroseconds)
 	a := app.NewWithID("io.fyne.demo")
 	window := a.NewWindow("Scope")
 	window.SetPadded(false)
@@ -92,8 +94,10 @@ func main() {
 	if useName == "tps2000" {
 		scope, err = tps2000.New("")
 		if err != nil {
-			alog.Error("No tps2000 scope found")
+			alog.Fatal("No tps2000 scope found, %s", err)
 		}
+		_ = scope.SetupTime(1e-3/250, 0.0, instr.MinMax, 2500)
+		_ = scope.SetupChannel(instr.Ch1, 10.0, -4.0, instr.DC)
 	} else {
 		digilentAd2, err = ad2.New("")
 		err = SetupAd2(digilentAd2, 1000)

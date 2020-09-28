@@ -1,3 +1,5 @@
+// Copyright 2020 Jan Kåre Vatne. All rights reserved.
+
 package plot
 
 import (

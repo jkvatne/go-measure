@@ -37,7 +37,7 @@ func TestBasic(t *testing.T) {
 func TestMeasurements(t *testing.T) {
 	if o := setupTest(t); o != nil {
 
-		err := o.SetupTime(1e-3/250, 20e-6, instr.MinMax)
+		err := o.SetupTime(1e-3/250, 20e-6, instr.MinMax, 2500)
 		assert.NoError(t, err)
 
 		f, err := o.Measure(instr.TRIG, "FREQ")
@@ -85,12 +85,13 @@ func TestMeasurements(t *testing.T) {
 
 func TestCurve(t *testing.T) {
 	if o := setupTest(t); o != nil {
-		sampleCount := 50
-		data, err := o.Curve([]instr.Chan{instr.Ch1}, sampleCount)
+		err := o.SetupTime(1e-3/250, 0.0, instr.MinMax, 50)
+		assert.NoError(t, err, "Setup time")
+		data, err := o.GetSamples()
 		assert.NoError(t, err, "Must have channel 1 enabled on the scope")
-		assert.Equal(t, 2, len(data), "expected one datasets")
+		assert.Equal(t, 3, len(data), "expected one dataset")
 		if len(data) > 0 {
-			assert.Equal(t, sampleCount, len(data[0]))
+			assert.Equal(t, 50, len(data[0]))
 			fmt.Println(data[0])
 		}
 		o.Close()
@@ -108,7 +109,7 @@ func TestChannelSetup(t *testing.T) {
 		assert.NoError(t, err, "Failed setup channel 3")
 		err = o.SetupChannel(instr.Ch2, 0.0, 0.0, instr.OFF)
 		assert.NoError(t, err, "Failed setup channel 4")
-		err = o.SetupTime(100e-6/250, 25e-6, instr.Average)
+		err = o.SetupTime(100e-6/250, 25e-6, instr.Average, 2500)
 		o.Close()
 	}
 }
@@ -116,7 +117,7 @@ func TestChannelSetup(t *testing.T) {
 func TestSetupTime(t *testing.T) {
 	time.Sleep(time.Second)
 	if o := setupTest(t); o != nil {
-		err := o.SetupTime(1e-3/250, 2e-3, instr.MinMax)
+		err := o.SetupTime(1e-3/250, 2e-3, instr.MinMax, 2500)
 		assert.NoError(t, err, "Failed SetupTime")
 		o.Close()
 	}

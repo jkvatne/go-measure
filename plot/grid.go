@@ -1,3 +1,5 @@
+// Copyright 2020 Jan Kåre Vatne. All rights reserved.
+
 package plot
 
 import (
@@ -43,6 +45,7 @@ func vTicks(img draw.Image, p1, p2 image.Point, n, dx int) {
 
 func hNum(img draw.Image, p1, p2 image.Point, t1, t2 float64) {
 	tmax := math.Max(t1, t2)
+
 	unit := "s"
 	if tmax < 1e-6 {
 		unit = "nS"
@@ -120,7 +123,7 @@ func plot(img draw.Image, data [][]float64) {
 	draw.Draw(img, img.Bounds(), image.NewUniform(colornames.Black), image.Pt(0, 0), draw.Src)
 	// Exit if no data - leave black screen
 	if data == nil {
-		Label(img, 35, h10+2, "No data", colornames.White, Regular10)
+		Label(img, 150, h10+2, "No data", colornames.White, Regular10)
 		return
 	}
 

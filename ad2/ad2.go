@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jkvatne/go-measure/alog"
 	"github.com/jkvatne/go-measure/instr"
 )
 
@@ -46,8 +45,11 @@ type Ad2 struct {
 	devNo             int
 	isOpen            bool
 	sampleIntervalSec float64
+	sampleCount       int
 	Offset            [2]float64
 	Range             [2]float64
+	enabled           [2]bool
+	channelCount      int
 }
 
 // TDeviceInfo is info about each device connected
@@ -59,6 +61,26 @@ type TDeviceInfo struct {
 
 // DeviceInfo is an array of DeviceInfo
 var DeviceInfo []TDeviceInfo
+
+// New will create an instance
+func New(sno string) (a *Ad2, err error) {
+	a = &Ad2{}
+	err = a.Open(sno)
+	time.Sleep(100 * time.Millisecond)
+	C.FDwfAnalogInReset(a.hdwf)
+	var rng C.double
+	var ofs C.double
+	C.FDwfAnalogInChannelRangeGet(a.hdwf, C.int(0), &rng)
+	C.FDwfAnalogInChannelOffsetGet(a.hdwf, C.int(0), &ofs)
+	a.Range[0] = float64(rng)
+	a.Offset[0] = float64(ofs)
+	C.FDwfAnalogInChannelRangeGet(a.hdwf, C.int(1), &rng)
+	C.FDwfAnalogInChannelOffsetGet(a.hdwf, C.int(1), &ofs)
+	a.Range[1] = float64(rng)
+	a.Offset[1] = float64(ofs)
+	a.channelCount = 2
+	return
+}
 
 // QueryIdn will read the ID from the instrument.
 func (a *Ad2) QueryIdn() (string, error) {
@@ -94,28 +116,8 @@ func Enumerate() {
 		if open == 1 {
 			DeviceInfo[i].Unavailable = true
 		}
-		alog.Info("Found %s, %s\n", DeviceInfo[i].Name, DeviceInfo[i].SerialNumber)
+		fmt.Printf("Found %s, %s\n", DeviceInfo[i].Name, DeviceInfo[i].SerialNumber)
 	}
-}
-
-// New will create an instance
-func New(sno string) (*Ad2, error) {
-	a := &Ad2{}
-	err := a.Open(sno)
-	time.Sleep(100 * time.Millisecond)
-	C.FDwfAnalogInReset(a.hdwf)
-	var rng C.double
-	var ofs C.double
-	C.FDwfAnalogInChannelRangeGet(a.hdwf, C.int(0), &rng)
-	C.FDwfAnalogInChannelOffsetGet(a.hdwf, C.int(0), &ofs)
-	a.Range[0] = float64(rng)
-	a.Offset[0] = float64(ofs)
-	C.FDwfAnalogInChannelRangeGet(a.hdwf, C.int(1), &rng)
-	C.FDwfAnalogInChannelOffsetGet(a.hdwf, C.int(1), &ofs)
-	a.Range[1] = float64(rng)
-	a.Offset[1] = float64(ofs)
-	return a, err
-
 }
 
 // Open will initialize the Digilent Analog Discovery 2 unit
@@ -161,7 +163,7 @@ func (a *Ad2) Disable(ch instr.Chan) {
 
 // ChannelCount returns number of implemented channels
 func (a *Ad2) ChannelCount() int {
-	return 2
+	return a.channelCount
 }
 
 // GetSetpoint returns last settpoint
@@ -211,7 +213,13 @@ func (a *Ad2) SetupChannel(ch instr.Chan, rng float64, ofs float64, coupling ins
 	if coupling != instr.DC {
 		return fmt.Errorf("only DC coupling allowed")
 	}
+	a.enabled[ch-instr.Ch1] = true
 	return nil
+}
+
+// DisableChannel will turn channel off
+func (a *Ad2) DisableChannel(ch instr.Chan) {
+	a.enabled[ch-instr.Ch1] = false
 }
 
 // Measure (ch int, typ string) (float64, error)
@@ -283,9 +291,13 @@ func (a *Ad2) StartAnalogOut(ch instr.Chan) {
 
 // SetupTime will configure the sample interval and mode
 // Mode is instr.MinMax, instr.Average or instr.Sample
-func (a *Ad2) SetupTime(sampleIntervalSec float64, xPosSec float64, mode instr.SampleMode) error {
+func (a *Ad2) SetupTime(sampleIntervalSec float64, xPosSec float64, mode instr.SampleMode, sampleCount int) error {
 	// The Ad2 samples at 100Msps. The filter constant determine how to go
 	//from n input sample to 1 stored sample.
+	if sampleCount > a.MaxBuffer {
+		return fmt.Errorf("%d samples, max is %d", sampleCount, a.MaxBuffer)
+	}
+	a.sampleCount = sampleCount
 	n := math.Round(sampleIntervalSec * 100e6)
 	a.sampleIntervalSec = n / 100e6
 	sampleFreq := C.double(100e6 / n)
@@ -336,12 +348,9 @@ func (a *Ad2) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, slope
 	return nil
 }
 
-// Curve will return a dataset (points) of 2500 points scaled
-func (a *Ad2) Curve(channels []instr.Chan, samples int) (data [][]float64, err error) {
-	if samples > a.MaxBuffer {
-		return nil, fmt.Errorf("%d samles, max is %d", samples, a.MaxBuffer)
-	}
-	C.FDwfAnalogInBufferSizeSet(a.hdwf, C.int(samples))
+// GetSamples will return a dataset (points) of 2500 points scaled
+func (a *Ad2) GetSamples() (data [][]float64, err error) {
+	C.FDwfAnalogInBufferSizeSet(a.hdwf, C.int(a.sampleCount))
 	// Set aquisition mode for a single scan.
 	C.FDwfAnalogInAcquisitionModeSet(a.hdwf, C.acqmodeSingle)
 
@@ -355,25 +364,35 @@ func (a *Ad2) Curve(channels []instr.Chan, samples int) (data [][]float64, err e
 		}
 	}
 	var timeData []float64
-	for i := 0; i < samples; i++ {
+	for i := 0; i < a.sampleCount; i++ {
 		timeData = append(timeData, float64(i)*a.sampleIntervalSec)
 	}
 	data = append(data, timeData)
-
-	for _, channel := range channels {
-		chanFloat := make([]float64, samples)
-		C.FDwfAnalogInStatusData(a.hdwf, C.int(channel-instr.Ch1), (*C.double)(&chanFloat[0]), C.int(samples))
-		data = append(data, chanFloat)
-	}
-
 	min := []float64{}
 	max := []float64{}
-	for _, channel := range channels {
-		max = append(max, a.Range[channel-1]/2-a.Offset[channel-1])
-		min = append(min, -a.Range[channel-1]/2-a.Offset[channel-1])
+
+	for channel := 0; channel < 2; channel++ {
+		if a.enabled[channel] {
+			chanFloat := make([]float64, a.sampleCount)
+			C.FDwfAnalogInStatusData(a.hdwf, C.int(channel), (*C.double)(&chanFloat[0]), C.int(a.sampleCount))
+			data = append(data, chanFloat)
+			max = append(max, a.Range[channel]/2-a.Offset[channel])
+			min = append(min, -a.Range[channel]/2-a.Offset[channel])
+		}
 	}
 	data = append(data, max, min)
 	return data, nil
+}
+
+// GetChanInfo returns a string with channel settings like gain/offset
+func (a *Ad2) GetChanInfo() (info []string) {
+	for ch := 0; ch < a.channelCount; ch++ {
+		if a.enabled[ch] {
+			s := fmt.Sprintf("Ch%d %s/div", ch, instr.VoltToStr(a.Range[ch]/10))
+			info = append(info, s)
+		}
+	}
+	return
 }
 
 // GetTime will return horizontal settings

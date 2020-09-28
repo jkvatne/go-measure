@@ -1,20 +1,28 @@
+// Package tps2000 defines a Tektronix oscilloscope in the Tps2000 series
 package tps2000
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jkvatne/go-measure/alog"
 	"github.com/jkvatne/go-measure/instr"
 )
 
-// Tps2000 defines a Tektronix oscilloscope in the Tps2000 series
+// Tps2000 contains local state data for the scope
 type Tps2000 struct {
 	instr.Connection
 	currentChan     instr.Chan
 	measurementType string
+	sampleCount     int
+	maxSampleCount  int
+	enabled         [4]bool
+	offsets         [4]float64
+	ranges          [4]float64
+	channelCount    int
 }
 
 // Declare conformity with Scope interface
@@ -23,22 +31,6 @@ var _ instr.Scope = (*Tps2000)(nil)
 // Point is a 2D point, usually containing (Volt, Time) points
 type Point struct {
 	x, y float64
-}
-
-// QueryIdn will read the ID from the instrument.
-func (s *Tps2000) QueryIdn() (string, error) {
-	name, err := s.Ask("*IDN?")
-	if err != nil {
-		return "", fmt.Errorf("Error, %s", err)
-	}
-	s.Connection.Name = name
-	return name, nil
-}
-
-// Close will terminate connection
-func (s *Tps2000) Close() {
-	s.Connection.Close()
-	time.Sleep(200 * time.Millisecond)
 }
 
 // New is a Oscilloscope instance for the tti supply
@@ -57,7 +49,27 @@ func New(port string) (instr.Scope, error) {
 	if !strings.HasPrefix(osc.Connection.Name, "TEKTRONIX,TPS 20") {
 		return nil, fmt.Errorf("port %s has not a Textronix osciloscope", port)
 	}
+	osc.sampleCount = 2500
+	osc.maxSampleCount = 2500
+	osc.channelCount = 4
+
 	return osc, nil
+}
+
+// QueryIdn will read the ID from the instrument.
+func (s *Tps2000) QueryIdn() (string, error) {
+	name, err := s.Ask("*IDN?")
+	if err != nil {
+		return "", fmt.Errorf("Error, %s", err)
+	}
+	s.Connection.Name = name
+	return name, nil
+}
+
+// Close will terminate connection
+func (s *Tps2000) Close() {
+	s.Connection.Close()
+	time.Sleep(200 * time.Millisecond)
 }
 
 // ButtonLights will turn on/off the front panel background lights
@@ -85,15 +97,35 @@ func (s *Tps2000) opc() string {
 	return s.ReadString()
 }
 
-// Curve will return a dataset (points) of 2500 points scaled
-func (s *Tps2000) Curve(channels []instr.Chan, samples int) (data [][]float64, err error) {
+// DisableChannel turns the channel off (no longer visible)
+func (s *Tps2000) DisableChannel(ch instr.Chan) {
+	s.enabled[ch] = false
+}
+
+var running int32
+
+func run(start bool) {
+	if start {
+		if atomic.SwapInt32(&running, 1) == 1 {
+			alog.Fatal("GetSamples() was running")
+		}
+	} else {
+		atomic.StoreInt32(&running, 0)
+	}
+}
+
+// GetSamples will return a dataset (points) of 2500 points scaled
+func (s *Tps2000) GetSamples() (data [][]float64, err error) {
+	run(true)
+	defer run(false)
+
 	// Set binary encoding with lsb first
-	err = s.Write("DATA:WIDTH 1;START 1;STOP %d;ENCDG SRI", samples)
+	err = s.Write("DATA:WIDTH 1;START 1;STOP %d;ENCDG SRI", s.sampleCount)
 	if err != nil {
 		return nil, err
 	}
 	// Read time (horizontal) scaling
-	resp, err := s.Ask("WFMPRE:" + chanString[channels[0]] + ":XINCR?")
+	resp, err := s.Ask("WFMPRE:CH1:XINCR?")
 	if err != nil {
 		return nil, err
 	}
@@ -103,56 +135,58 @@ func (s *Tps2000) Curve(channels []instr.Chan, samples int) (data [][]float64, e
 	}
 	// Generate time sequence
 	var timeData []float64
-	for i := 0; i < samples; i++ {
+	for i := 0; i < s.sampleCount; i++ {
 		timeData = append(timeData, float64(i)*xIncr)
 	}
 	data = append(data, timeData)
 	var yMax []float64
 	var yMin []float64
-	for _, channel := range channels {
-		_ = s.Write("DATA:SOURCE " + chanString[channel])
-		_ = s.Write("CURVE?")
-		s.Timeout = 5 * time.Second
-		b := s.Connection.ReadByte()
-		if b != 35 {
-			return nil, fmt.Errorf("data should start with #1, #2 or #3")
+	for channel := 0; channel < 4; channel++ {
+		if s.enabled[channel] {
+			_ = s.Write("DATA:SOURCE " + chanString[channel])
+			_ = s.Write("CURVE?")
+			s.Timeout = 5 * time.Second
+			b := s.Connection.ReadByte()
+			if b != 35 {
+				return nil, fmt.Errorf("data should start with #1, #2 or #3")
+			}
+			// Get number of digits in length field
+			nd := int(s.Connection.ReadByte())
+			if nd < 48 || nd > 52 {
+				return nil, fmt.Errorf("data should start with #1, #2 or #3")
+			}
+			n := 0
+			for i := 0; i < nd-48; i++ {
+				n = n*10 + int(s.Connection.ReadByte()) - 48
+			}
+			if n != s.sampleCount {
+				return nil, fmt.Errorf("wrong length of data")
+			}
+			s.Timeout = time.Second
+			values := make([]byte, n)
+			time.Sleep(time.Second * time.Duration(s.sampleCount*10) / time.Duration(s.Baudrate))
+			actual := s.Connection.Read(values)
+			if actual != s.sampleCount {
+				return nil, fmt.Errorf("wrong length of data")
+			}
+			// Read channel scaling
+			yScale, err := s.PollFloat("WFMPRE:YMULT?")
+			if err != nil {
+				return nil, fmt.Errorf("error reading channel scaling YMULT")
+			}
+			yOffset, err := s.PollFloat("WFMPRE:YOFF?")
+			if err != nil {
+				return nil, fmt.Errorf("error reading channel scaling YOFF")
+			}
+			yMax = append(yMax, (125-yOffset)*yScale)
+			yMin = append(yMin, (-125-yOffset)*yScale)
+			var chanData []float64
+			for i := 0; i < s.sampleCount; i++ {
+				v := (float64(int8(values[i])) - yOffset) * yScale
+				chanData = append(chanData, v)
+			}
+			data = append(data, chanData)
 		}
-		// Get number of digits in length field
-		nd := int(s.Connection.ReadByte())
-		if nd < 48 || nd > 52 {
-			return nil, fmt.Errorf("data should start with #1, #2 or #3")
-		}
-		n := 0
-		for i := 0; i < nd-48; i++ {
-			n = n*10 + int(s.Connection.ReadByte()) - 48
-		}
-		if n != samples {
-			return nil, fmt.Errorf("wrong length of data")
-		}
-		s.Timeout = time.Second
-		values := make([]byte, n)
-		time.Sleep(time.Second * time.Duration(samples*10) / time.Duration(s.Baudrate))
-		actual := s.Connection.Read(values)
-		if actual != samples {
-			return nil, fmt.Errorf("wrong length of data")
-		}
-		// Read channel scaling
-		yScale, err := s.PollFloat("WFMPRE:YMULT?")
-		if err != nil {
-			return nil, fmt.Errorf("error reading channel scaling YMULT")
-		}
-		yOffset, err := s.PollFloat("WFMPRE:YOFF?")
-		if err != nil {
-			return nil, fmt.Errorf("error reading channel scaling YOFF")
-		}
-		yMax = append(yMax, (125-yOffset)*yScale)
-		yMin = append(yMin, (-125-yOffset)*yScale)
-		var chanData []float64
-		for i := 0; i < samples; i++ {
-			v := (float64(int8(values[i])) - yOffset) * yScale
-			chanData = append(chanData, v)
-		}
-		data = append(data, chanData)
 	}
 	data = append(data, yMax, yMin)
 	return data, nil
@@ -164,7 +198,7 @@ func (s *Tps2000) Curve(channels []instr.Chan, samples int) (data [][]float64, e
 // frequency determined from a channels waveform
 func (s *Tps2000) Measure(ch instr.Chan, typ string) (float64, error) {
 	if (ch < instr.Ch1 || ch > instr.Ch4) && ch != instr.TRIG {
-		return 0.0, fmt.Errorf("%s is illegal channel", chanString[ch])
+		return 0.0, fmt.Errorf("%d is illegal channel", ch)
 	}
 	var resp string
 	if ch == instr.TRIG {
@@ -193,6 +227,10 @@ func (s *Tps2000) Measure(ch instr.Chan, typ string) (float64, error) {
 // rng is the voltage range, or 10xVolt/div. Dvs rng=10V gives +-5V or 1V/div
 // offset is the voltage added to the signal before scaling. 0V is center of screen
 func (s *Tps2000) SetupChannel(ch instr.Chan, rng float64, offs float64, coupling instr.Coupling) (err error) {
+	c := int(ch - instr.Ch1)
+	s.offsets[c] = offs
+	s.ranges[c] = rng
+	s.enabled[c] = true
 	// Offset is given in divisions
 	_ = s.Write("CH%d:POS %0.3g", ch, offs/rng*10.0)
 	// scale is the volt pr division setting
@@ -213,8 +251,23 @@ func (s *Tps2000) SetupChannel(ch instr.Chan, rng float64, offs float64, couplin
 	return
 }
 
+// GetChanInfo ...
+func (s *Tps2000) GetChanInfo() (info []string) {
+	for ch := 0; ch < s.channelCount; ch++ {
+		if s.enabled[ch] {
+			s := fmt.Sprintf("Ch%d %s/div ", int(ch), instr.VoltToStr(s.ranges[ch]/10))
+			info = append(info, s)
+		}
+	}
+	return info
+}
+
 // SetupTime will set samples pr second and trigger offset
-func (s *Tps2000) SetupTime(sampleIntervalSec float64, xPosSec float64, mode instr.SampleMode) error {
+func (s *Tps2000) SetupTime(sampleIntervalSec float64, xPosSec float64, mode instr.SampleMode, sampleCount int) error {
+	if sampleCount > s.maxSampleCount {
+		return fmt.Errorf("samplecount of %d is larger than max %d", sampleCount, s.maxSampleCount)
+	}
+	s.sampleCount = sampleCount
 	// The scope allways store 2500 samples for a full 10 divisions or 250 s/div
 	// Samples pr sec is then
 	nr := fmt.Sprintf("%0.3e", sampleIntervalSec*250)
@@ -247,7 +300,7 @@ func (s *Tps2000) GetTime() (sampleIntervalSec float64, xPosSec float64) {
 
 var couplingString = [...]string{"DC", "DC", "AC", "DC", "HFR", "LFR", "NOISE"}
 var slopeString = [...]string{"FALL", "RISE"}
-var chanString = [...]string{"", "CH1", "CH2", "CH3", "CH4", "EXT", "EXT5", "EXT10", "AC LINE"}
+var chanString = [...]string{"CH1", "CH2", "CH3", "CH4", "EXT", "EXT5", "EXT10", "AC LINE"}
 
 // SetupTrigger will define scope trigger settings
 func (s *Tps2000) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, slope instr.Slope, trigLevel float64, auto bool, xPos float64) error {
@@ -263,4 +316,9 @@ func (s *Tps2000) SetupTrigger(sourceChan instr.Chan, coupling instr.Coupling, s
 	}
 	err := s.Write("HOR:DELAY:POS %0.4e", xPos)
 	return err
+}
+
+// ChannelCount is the maximum number of channels for this instrument
+func (s *Tps2000) ChannelCount() int {
+	return s.channelCount
 }
