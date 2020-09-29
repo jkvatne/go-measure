@@ -12,6 +12,5 @@ require (
 	golang.org/x/sys v0.0.0-20200828194041-157a740278f4
 )
 
-replace github.com/jkvatne/serial => C:\doc\serial-jkvatne
-
-replace fyne.io/fyne => C:\Users\jkv\go\src\fyne.io\fyne
+//replace github.com/jkvatne/serial => C:\doc\serial-jkvatne
+//replace fyne.io/fyne => C:\Users\jkv\go\src\fyne.io\fyne
