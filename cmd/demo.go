@@ -45,6 +45,7 @@ func handleEvents(f *plot.Frame, scope instr.Scope) {
 				return
 			}
 			if e == evRedraw || e == evFetchData {
+				alog.Info("Refresh plot.Frame")
 				f.Refresh()
 			}
 		}
@@ -54,7 +55,7 @@ func handleEvents(f *plot.Frame, scope instr.Scope) {
 func startPolling() {
 	go func() {
 		for {
-			time.Sleep(3 * time.Second)
+			time.Sleep(2 * time.Second)
 			events <- evFetchData
 		}
 	}()
@@ -109,8 +110,8 @@ func main() {
 
 	time.Sleep(100 * time.Millisecond)
 
-	m := glfw.GetMonitors()[0].GetVideoMode()
-	alog.Info("Monitor W=%d, H=%d\n", m.Width, m.Height)
+	m := glfw.GetMonitors()[1].GetVideoMode()
+	alog.Info("Monitor W=%d, H=%d, scale=%0.2f\n", m.Width, m.Height, window.Canvas().Scale())
 
 	// Top header label
 	top := widget.NewLabelWithStyle("Oscilloscope", fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
@@ -119,8 +120,8 @@ func main() {
 	window.SetContent(fyne.NewContainerWithLayout(layout.NewBorderLayout(top, nil, nil, nil), top, f))
 	// Center On screen only needed if not maximized
 	window.CenterOnScreen()
-	// Maximize to fill all of screen
-	window.Maximize()
+	//window.Resize(fyne.Size{m.Width*4/5 - 106, m.Height*4/5 - 160})
+	window.SetFullScreen(true)
 	go handleEvents(f, scope)
 	events <- evFetchData
 	startPolling()

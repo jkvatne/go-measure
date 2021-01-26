@@ -99,7 +99,6 @@ func NewLabel(img *image.RGBA, x, y int, label string, c color.RGBA) {
 	d.DrawString(label)
 }
 
-var Regular12 font.Face
 var Regular10 font.Face
 var h10 int
 
@@ -110,5 +109,4 @@ func init() {
 	}
 	Regular10 = truetype.NewFace(f, &truetype.Options{Size: 10, DPI: 96})
 	h10 = int(Regular10.Metrics().Ascent / 64)
-	Regular12 = truetype.NewFace(f, &truetype.Options{Size: 12, DPI: 96})
 }

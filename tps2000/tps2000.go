@@ -28,6 +28,8 @@ type Tps2000 struct {
 // Declare conformity with Scope interface
 var _ instr.Scope = (*Tps2000)(nil)
 
+var callNo int
+
 // Point is a 2D point, usually containing (Volt, Time) points
 type Point struct {
 	x, y float64
@@ -188,6 +190,12 @@ func (s *Tps2000) GetSamples() (data [][]float64, err error) {
 			data = append(data, chanData)
 		}
 	}
+	callNo++
+	dataPoints := 0
+	if len(data) > 1 {
+		dataPoints = len(data[1])
+	}
+	alog.Info("GetSamplies() n=%d, %d %d", callNo, len(data), dataPoints)
 	data = append(data, yMax, yMin)
 	return data, nil
 }

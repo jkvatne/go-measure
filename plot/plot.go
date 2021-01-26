@@ -86,7 +86,7 @@ func (r *frameRender) Destroy() {
 
 // MinSize is the minimum size
 func (f *Frame) MinSize() fyne.Size {
-	return fyne.NewSize(640, 480)
+	return fyne.NewSize(1540, 880)
 }
 
 // CreateRenderer gets the widget renderer for this table - internal use only
