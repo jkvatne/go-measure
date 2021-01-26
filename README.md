@@ -28,3 +28,5 @@ Instruments support will be extended later. The following are currently supporte
 
 ### Multifunctions instruments
 * Digilent Analog Discovery 2
+
+--
