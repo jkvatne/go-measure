@@ -8,9 +8,7 @@ require (
 	github.com/goki/freetype v0.0.0-20181231101311-fa8a33aabaff
 	github.com/jkvatne/serial v0.1.0
 	github.com/stretchr/testify v1.5.1
-	golang.org/x/image v0.0.0-20200430140353-33d19683fad8
-	golang.org/x/sys v0.0.0-20200828194041-157a740278f4
+	golang.org/x/image v0.5.0
+	golang.org/x/net v0.7.0 // indirect
+	golang.org/x/sys v0.5.0
 )
-
-//replace github.com/jkvatne/serial => C:\doc\serial-jkvatne
-//replace fyne.io/fyne => C:\Users\jkv\go\src\fyne.io\fyne

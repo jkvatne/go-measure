@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var TtiPort = "192.168.2.18:9221"
+var TtiPort = "192.168.2.33:9221"
 
 func TestTtiPsu(t *testing.T) {
 	fmt.Printf("Test TTI supply using port %s\n", TtiPort)
