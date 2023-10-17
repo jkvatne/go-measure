@@ -14,7 +14,7 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.8.2
 	golang.org/x/image v0.5.0
-	golang.org/x/net v0.7.0 // indirect
-	golang.org/x/sys v0.5.0
+	golang.org/x/net v0.13.0 // indirect
+	golang.org/x/sys v0.10.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
